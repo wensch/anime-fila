@@ -7,7 +7,7 @@ android {
         applicationId "dev.crunchysync.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (project.findProperty('versionCode') ?: '1').toInteger()
+        versionCode = (project.findProperty('versionCode') ?: '1').toString().toInteger()
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
