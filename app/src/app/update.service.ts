@@ -13,6 +13,8 @@ export class UpdateService {
   readonly currentBuild = BUILD_NUMBER;
   /** Build disponível na release quando é mais novo que o instalado; senão null. */
   readonly available = signal<number | null>(null);
+  /** Link real do APK informado pela release (com reserva no link fixo). */
+  private downloadUrl: string | null = null;
   readonly checking = signal(false);
   /** Resultado da última checagem manual, para mostrar ao usuário. */
   readonly lastResult = signal<string | null>(null);
@@ -32,6 +34,8 @@ export class UpdateService {
         readTimeout: 15000,
       });
       const remote = res.status === 200 ? parseBuildNumber(res.data?.body) : null;
+      const asset = (res.data?.assets ?? []).find((a: any) => /\.apk$/i.test(a?.name ?? ''));
+      this.downloadUrl = asset?.browser_download_url ?? null;
       this.diag.log(`atualização: instalado #${this.currentBuild}, disponível #${remote ?? '?'} (HTTP ${res.status})`);
       if (isNewer(remote, this.currentBuild)) {
         this.available.set(remote);
@@ -50,7 +54,7 @@ export class UpdateService {
 
   /** Abre o download do APK; ao terminar, toque na notificação para instalar. */
   async download(): Promise<void> {
-    await Browser.open({ url: APK_URL });
+    await Browser.open({ url: this.downloadUrl ?? APK_URL });
   }
 
   dismiss(): void {

@@ -64,9 +64,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # O nome do arquivo na release precisa ser CrunchySync.apk (o app baixa por esse link).
+          cp android/app/build/outputs/apk/release/app-release.apk CrunchySync.apk
           gh release delete apk-latest --cleanup-tag --yes || true
           gh release create apk-latest \
-            "android/app/build/outputs/apk/release/app-release.apk#CrunchySync.apk" \
+            "CrunchySync.apk" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "CrunchySync (APK mais recente)" \
             --notes "Build #${{ github.run_number }} do commit $GITHUB_SHA"
