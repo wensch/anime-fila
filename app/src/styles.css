@@ -45,9 +45,6 @@
   .link {
     @apply inline-flex min-h-12 items-center px-2 text-sm text-orange-400 underline;
   }
-  .chip-limit {
-    @apply inline-flex min-h-12 items-center px-1 text-xs text-amber-400 underline;
-  }
   .menu-item {
     @apply flex min-h-12 w-full items-center rounded-lg px-3 text-left text-sm text-zinc-100 hover:bg-zinc-800;
   }

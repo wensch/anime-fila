@@ -372,6 +372,12 @@
             }
           </select>
         </label>
+        @if (limitReached()) {
+          <p class="text-sm text-zinc-400">
+            {{ settings.maxEpisodes() }} episódios carregados: pode haver mais no histórico. Escolha
+            um limite maior acima para ver mais.
+          </p>
+        }
         <div class="flex items-center justify-between gap-2">
           @if (hasFilters()) {
             <button type="button" class="link -ml-2" (click)="clearFilters()">
@@ -429,20 +435,6 @@
                   · {{ plural(selectedSeries().size, 'selecionada', 'selecionadas') }}
                 }
               </span>
-              @if (limitReached()) {
-                <button
-                  type="button"
-                  class="chip-limit"
-                  [attr.aria-label]="
-                    'Limite de ' +
-                    settings.maxEpisodes() +
-                    ' episódios atingido; toque para ajustar'
-                  "
-                  (click)="filtersOpen.set(true)"
-                >
-                  limite de {{ settings.maxEpisodes() }}
-                </button>
-              }
             </span>
             @if (selectMode()) {
               <button type="button" class="link -mr-2 gap-1" (click)="toggleSelectMode()">
@@ -597,20 +589,6 @@
           <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
             <span class="flex min-w-0 flex-wrap items-center gap-x-2">
               <span>{{ plural(visibleEpisodes().length, 'episódio', 'episódios') }}</span>
-              @if (limitReached()) {
-                <button
-                  type="button"
-                  class="chip-limit"
-                  [attr.aria-label]="
-                    'Limite de ' +
-                    settings.maxEpisodes() +
-                    ' episódios atingido; toque para ajustar'
-                  "
-                  (click)="filtersOpen.set(true)"
-                >
-                  limite de {{ settings.maxEpisodes() }}
-                </button>
-              }
             </span>
             <span class="flex gap-1">
               <button type="button" class="link" (click)="selectAllVisible()">
