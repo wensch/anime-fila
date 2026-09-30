@@ -26,7 +26,7 @@ export const DEFAULT_CONFIG: ApiConfig = {
 
 export const AUTH_PATH = '/auth/v1/token';
 export const PAGE_SIZE = 100;
-export const MAX_PAGES = 50;
-/** Teto de episódios carregados do histórico (evita laços e listas gigantes). */
-export const MAX_EPISODES = 500;
+/** Opções do filtro "Carregar até" (episódios do histórico). */
+export const EPISODE_LIMITS = [100, 200, 400, 500, 1000, 2000];
+export const DEFAULT_MAX_EPISODES = 500;
 export const DELETE_CONCURRENCY = 5;

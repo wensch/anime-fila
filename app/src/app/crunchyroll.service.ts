@@ -1,7 +1,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Injectable, inject } from '@angular/core';
 import { DiagnosticsService } from './diagnostics.service';
-import { AUTH_PATH, DELETE_CONCURRENCY, MAX_EPISODES, MAX_PAGES, PAGE_SIZE } from './endpoints';
+import { AUTH_PATH, DELETE_CONCURRENCY, PAGE_SIZE } from './endpoints';
 import { normalizeHistoryItem } from './history';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
@@ -90,11 +90,13 @@ export class CrunchyrollService {
     this.settings.setSession(null);
   }
 
-  async listHistory(): Promise<Episode[]> {
+  /** Carrega até `max` episódios (mais recentes primeiro), pedindo páginas de 100. */
+  async listHistory(max: number): Promise<Episode[]> {
     const accountId = await this.accountId();
     const path = fill(this.settings.config().historyPath, { account: accountId });
     const byId = new Map<string, Episode>();
-    for (let page = 1; page <= MAX_PAGES; page++) {
+    const maxPages = Math.ceil(max / PAGE_SIZE) + 2; // folga para páginas com repetidos
+    for (let page = 1; page <= maxPages; page++) {
       const body: any = await this.authed('GET', path, {
         params: { page: String(page), page_size: String(PAGE_SIZE), locale: this.settings.config().locale },
       });
@@ -110,10 +112,10 @@ export class CrunchyrollService {
       );
       if (data.length === 0 || data.length < PAGE_SIZE) break;
       if (byId.size === before) break; // a API ignorou o número da página: evita laço
-      if (byId.size >= MAX_EPISODES) break;
+      if (byId.size >= max) break;
       // Não confia em `total`: só para quando a página vem incompleta, vazia ou repetida.
     }
-    const episodes = [...byId.values()];
+    const episodes = [...byId.values()].slice(0, max);
     return episodes;
   }
 

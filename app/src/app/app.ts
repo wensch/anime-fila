@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
-import { ApiConfig } from './endpoints';
+import { ApiConfig, EPISODE_LIMITS } from './endpoints';
 import {
   EMPTY_FILTERS,
   Filters,
@@ -49,6 +49,7 @@ export class App {
   protected readonly pending = signal<Pending | null>(null);
   protected readonly removing = signal(false);
 
+  protected readonly limits = EPISODE_LIMITS;
   protected readonly showDiag = signal(false);
   protected readonly showAdvanced = signal(false);
   protected readonly copied = signal(false);
@@ -105,7 +106,7 @@ export class App {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.episodes.set(await this.cr.listHistory());
+      this.episodes.set(await this.cr.listHistory(this.settings.maxEpisodes()));
       this.loaded.set(true);
       this.selected.set(new Set());
     } catch (e) {
@@ -150,6 +151,13 @@ export class App {
   protected setNumber(key: 'epMin' | 'epMax', raw: string): void {
     const n = raw.trim() === '' ? null : Number(raw);
     this.setFilter({ [key]: n !== null && Number.isFinite(n) ? n : null });
+  }
+
+  protected setMaxEpisodes(raw: string): void {
+    const n = Number(raw);
+    if (!EPISODE_LIMITS.includes(n) || n === this.settings.maxEpisodes()) return;
+    this.settings.setMaxEpisodes(n);
+    void this.refresh();
   }
 
   protected clearFilters(): void {

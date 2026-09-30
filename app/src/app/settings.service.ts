@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { ApiConfig, DEFAULT_CONFIG } from './endpoints';
+import { ApiConfig, DEFAULT_CONFIG, DEFAULT_MAX_EPISODES, EPISODE_LIMITS } from './endpoints';
 
 export interface Session {
   accessToken: string;
@@ -14,6 +14,7 @@ interface Stored {
   session: Session | null;
   config: ApiConfig;
   deviceId: string;
+  maxEpisodes: number;
 }
 
 function load(): Stored {
@@ -24,12 +25,18 @@ function load(): Stored {
         session: parsed.session ?? null,
         config: { ...DEFAULT_CONFIG, ...parsed.config },
         deviceId: parsed.deviceId || crypto.randomUUID(),
+        maxEpisodes: EPISODE_LIMITS.includes(parsed.maxEpisodes) ? parsed.maxEpisodes : DEFAULT_MAX_EPISODES,
       };
     }
   } catch {
     /* armazenamento indisponível ou corrompido */
   }
-  return { session: null, config: { ...DEFAULT_CONFIG }, deviceId: crypto.randomUUID() };
+  return {
+    session: null,
+    config: { ...DEFAULT_CONFIG },
+    deviceId: crypto.randomUUID(),
+    maxEpisodes: DEFAULT_MAX_EPISODES,
+  };
 }
 
 /**
@@ -42,6 +49,8 @@ export class SettingsService {
   readonly session = signal<Session | null>(this.initial.session);
   readonly config = signal<ApiConfig>(this.initial.config);
   readonly deviceId = this.initial.deviceId;
+  /** Quantos episódios do histórico carregar (filtro "Carregar até"). */
+  readonly maxEpisodes = signal(this.initial.maxEpisodes);
 
   setSession(session: Session | null): void {
     this.session.set(session);
@@ -53,13 +62,23 @@ export class SettingsService {
     this.persist();
   }
 
+  setMaxEpisodes(n: number): void {
+    this.maxEpisodes.set(n);
+    this.persist();
+  }
+
   resetConfig(): void {
     this.setConfig({ ...DEFAULT_CONFIG });
   }
 
   private persist(): void {
     try {
-      const data: Stored = { session: this.session(), config: this.config(), deviceId: this.deviceId };
+      const data: Stored = {
+        session: this.session(),
+        config: this.config(),
+        deviceId: this.deviceId,
+        maxEpisodes: this.maxEpisodes(),
+      };
       localStorage.setItem(KEY, JSON.stringify(data));
     } catch {
       /* sem armazenamento: a sessão vale só até fechar o app */

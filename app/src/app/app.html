@@ -103,6 +103,18 @@
           </label>
         }
       </div>
+      <label class="block text-xs text-zinc-400">Carregar até (episódios do histórico)
+        <select class="field" (change)="setMaxEpisodes($any($event.target).value)">
+          @for (n of limits; track n) {
+            <option [value]="n" [selected]="n === settings.maxEpisodes()">{{ n }}</option>
+          }
+        </select>
+      </label>
+      @if (loaded() && episodes().length >= settings.maxEpisodes()) {
+        <p class="text-xs text-amber-400">
+          Limite atingido ({{ episodes().length }}): pode haver mais episódios. Aumente o limite para carregar mais.
+        </p>
+      }
       @if (hasFilters()) {
         <button type="button" class="text-xs text-orange-400 underline" (click)="clearFilters()">Limpar filtros</button>
       }
