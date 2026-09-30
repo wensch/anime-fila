@@ -23,4 +23,6 @@ export interface DeleteOutcome {
   failed: { id: string; error: string }[];
   /** true se o usuário cancelou antes de terminar. */
   cancelled?: boolean;
+  /** true se a sessão caiu no meio: `deleted` traz o que já foi apagado antes disso. */
+  expired?: boolean;
 }

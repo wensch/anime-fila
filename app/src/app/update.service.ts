@@ -82,8 +82,9 @@ export class UpdateService {
     }
     this.downloadError.set(null);
     this.progress.set(0);
-    const handle = await AppUpdater.addListener('progress', (d) => this.progress.set(d.percent));
+    let handle: { remove(): Promise<void> } | null = null;
     try {
+      handle = await AppUpdater.addListener('progress', (d) => this.progress.set(d.percent));
       await AppUpdater.install({ url });
       this.dismiss();
     } catch (e) {
@@ -95,7 +96,7 @@ export class UpdateService {
           : 'Não foi possível baixar dentro do app. Você pode baixar pelo navegador.',
       );
     } finally {
-      void handle.remove();
+      void handle?.remove();
       this.progress.set(null);
     }
   }

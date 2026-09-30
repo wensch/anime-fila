@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -50,6 +51,8 @@ public class PageFetchPlugin extends Plugin {
     private boolean ready = false;
     private boolean loadStarted = false;
     private boolean visible = false;
+    /** A última carga da página falhou (sem rede): a tela de erro não pode contar como "pronta". */
+    private boolean loadFailed = false;
 
     @Override
     public void load() {
@@ -73,7 +76,17 @@ public class PageFetchPlugin extends Plugin {
                 JSObject data = new JSObject();
                 data.put("url", url);
                 notifyListeners("pageFinished", data);
-                checkReady();
+                if (!loadFailed) checkReady();
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (!request.isForMainFrame()) return;
+                // Sem conexão (ou site fora do ar): libera quem espera e permite tentar de novo.
+                loadFailed = true;
+                loadStarted = false;
+                ready = false;
+                failWaiters("NETWORK", "Sem conexão com a Crunchyroll");
             }
 
             @Override
@@ -124,11 +137,7 @@ public class PageFetchPlugin extends Plugin {
         String url = call.getString("url");
         getActivity().runOnUiThread(() -> {
             showViews();
-            if (url != null) {
-                loadStarted = true;
-                ready = false;
-                web.loadUrl(url);
-            }
+            if (url != null) startLoad(url);
             call.resolve();
         });
     }
@@ -153,6 +162,7 @@ public class PageFetchPlugin extends Plugin {
             web.clearHistory();
             ready = false;
             loadStarted = false;
+            loadFailed = false;
             web.loadUrl("about:blank");
             call.resolve();
         });
@@ -179,12 +189,14 @@ public class PageFetchPlugin extends Plugin {
                 readyWaiters.add(call);
             }
             if (!loadStarted && url != null) {
-                loadStarted = true;
-                web.loadUrl(url);
+                startLoad(url);
             } else {
                 checkReady();
             }
-            main.postDelayed(() -> failWaiters("CHALLENGE"), READY_TIMEOUT_MS);
+            // Um prazo por chamada: não derruba quem entrou na fila depois.
+            main.postDelayed(
+                    () -> failWaiter(call, "CHALLENGE", "Verificação do Cloudflare não concluída"),
+                    READY_TIMEOUT_MS);
         });
     }
 
@@ -243,13 +255,28 @@ public class PageFetchPlugin extends Plugin {
         });
     }
 
-    private void failWaiters(String code) {
+    private void startLoad(String url) {
+        loadFailed = false;
+        loadStarted = true;
+        ready = false;
+        web.loadUrl(url);
+    }
+
+    private void failWaiter(PluginCall call, String code, String message) {
+        boolean removed;
+        synchronized (readyWaiters) {
+            removed = readyWaiters.remove(call);
+        }
+        if (removed) call.reject(message, code);
+    }
+
+    private void failWaiters(String code, String message) {
         List<PluginCall> waiters;
         synchronized (readyWaiters) {
             waiters = new ArrayList<>(readyWaiters);
             readyWaiters.clear();
         }
-        for (PluginCall c : waiters) c.reject("Verificação do Cloudflare não concluída", code);
+        for (PluginCall c : waiters) c.reject(message, code);
     }
 
     public class Bridge {

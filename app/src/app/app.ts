@@ -4,7 +4,8 @@ import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { CoverCacheService } from './cover-cache.service';
 import { keyOf } from './cover-cache';
-import { plural } from './text';
+import { DialogFocus } from './dialog-focus';
+import { plural, relativeTime } from './text';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
 import {
@@ -46,13 +47,14 @@ const PAGE = 100;
 
 @Component({
   selector: 'app-root',
-  imports: [DatePipe],
+  imports: [DatePipe, DialogFocus],
   templateUrl: './app.html',
 })
 export class App {
   private readonly cr = inject(CrunchyrollService);
   private readonly coverCache = inject(CoverCacheService);
   protected readonly plural = plural;
+  protected readonly relative = (iso: string | null) => relativeTime(iso);
   protected readonly settings = inject(SettingsService);
   protected readonly diag = inject(DiagnosticsService);
   protected readonly update = inject(UpdateService);
@@ -80,6 +82,14 @@ export class App {
   protected readonly filtersOpen = signal(false);
   protected readonly menuOpen = signal(false);
   protected readonly skeletons = [1, 2, 3, 4, 5, 6];
+  /** Rolou o bastante para mostrar o botão "voltar ao topo". */
+  protected readonly scrolled = signal(false);
+  /** Posição de rolagem de cada aba, para voltar exatamente onde estava. */
+  private readonly scrollPos: Record<Tab, number> = { series: 0, episodes: 0 };
+  private pressTimer: ReturnType<typeof setTimeout> | null = null;
+  private pressOrigin: { x: number; y: number } | null = null;
+  private longPressed = false;
+  private suppressClickUntil = 0;
   protected readonly sort = signal<SeriesSort>('recent');
   protected readonly limit = signal(PAGE);
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
@@ -127,12 +137,19 @@ export class App {
     return [f.from, f.to, f.epMin, f.epMax, f.olderThanMonths].filter((v) => v !== '' && v !== null)
       .length;
   });
+  /** Há uma barra de ação fixa embaixo (seleção): o botão "topo" sobe para não ficar por cima. */
+  protected readonly actionBarVisible = computed(
+    () =>
+      (this.tab() === 'episodes' && this.selected().size > 0) ||
+      (this.tab() === 'series' && this.selectedSeries().size > 0),
+  );
   protected readonly limitReached = computed(
     () => this.loaded() && this.episodes().length >= this.settings.maxEpisodes(),
   );
   protected readonly hasFilters = computed(() => {
     const f = this.filters();
     return !!(
+      f.seriesId ||
       f.query ||
       f.from ||
       f.to ||
@@ -167,13 +184,25 @@ export class App {
     // Botão Voltar do Android (e evento equivalente para testes/navegador).
     if (Capacitor.isNativePlatform()) void CapApp.addListener('backButton', () => this.onBack());
     document.addEventListener('crunchysync:back', () => this.onBack());
-    void this.update.check();
-    // Ao voltar ao app (vindo de outro), confere de novo se há versão nova.
+    let ticking = false;
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          this.scrolled.set(window.scrollY > window.innerHeight * 1.5);
+          ticking = false;
+        });
+      },
+      { passive: true },
+    );
+    void this.coverCache.init(); // lê as capas do disco (também num primeiro login)
+    void this.update.check(); // Ao voltar ao app (vindo de outro), confere de novo se há versão nova.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void this.update.checkIfDue();
     });
     if (this.loggedIn()) {
-      void this.coverCache.init();
       // Mostra na hora a última lista guardada e atualiza por trás.
       const cached = this.settings.loadHistoryCache();
       if (cached.length > 0) {
@@ -348,6 +377,7 @@ export class App {
         out.deleted.forEach((id) => deletedAll.add(id));
         failedCount += out.failed.length;
         cancelled = !!out.cancelled;
+        if (out.expired) throw new SessionExpiredError('Sessão expirada'); // o `finally` ainda reflete o que foi apagado
         // A API só mostra os ~1000 episódios mais recentes: depois de apagar, os mais antigos
         // dessas séries "sobem" para dentro da janela. Confere de novo e apaga o que restou.
         if (p.kind !== 'series' || !p.capped || cancelled) break;
@@ -456,30 +486,85 @@ export class App {
   }
 
   /** Abre Episódios já filtrado pela série, com a faixa "← Todas as séries" para voltar. */
-  protected showSeriesEpisodes(title: string): void {
-    this.episodeFilters.set({ ...EMPTY_FILTERS, query: title });
+  protected showSeriesEpisodes(seriesId: string, title: string): void {
+    this.scrollPos[this.tab()] = window.scrollY;
+    this.episodeFilters.set({ ...EMPTY_FILTERS, seriesId });
     this.drillTitle.set(title);
     this.selected.set(new Set());
     this.filtersOpen.set(false);
     this.limit.set(PAGE);
+    this.scrollPos.episodes = 0;
     this.tab.set('episodes');
-    window.scrollTo({ top: 0 });
+    this.restoreScroll(0);
   }
 
   protected setTab(t: Tab): void {
-    if (t === 'series' && this.drillTitle() !== null) this.backToSeries();
+    if (t === this.tab()) return;
+    if (t === 'series' && this.drillTitle() !== null) return this.backToSeries();
+    this.scrollPos[this.tab()] = window.scrollY;
     this.filtersOpen.set(false);
     this.tab.set(t);
-    window.scrollTo({ top: 0 });
+    this.restoreScroll(this.scrollPos[t]);
   }
 
   /** Volta de Episódios para Séries, desfazendo o filtro de "veio de uma série". */
   protected backToSeries(): void {
     if (this.drillTitle() !== null) this.episodeFilters.set({ ...EMPTY_FILTERS });
+    this.scrollPos[this.tab()] = window.scrollY;
     this.drillTitle.set(null);
     this.filtersOpen.set(false);
     this.tab.set('series');
-    window.scrollTo({ top: 0 });
+    this.restoreScroll(this.scrollPos.series);
+  }
+
+  /** Rola depois que a aba nova for desenhada (senão a página ainda está curta demais). */
+  private restoreScroll(y: number): void {
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y })));
+  }
+
+  protected scrollToTop(): void {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+  }
+
+  // ---- pressionar e segurar uma capa para começar a selecionar ----
+
+  protected pressStart(ev: PointerEvent, seriesId: string): void {
+    if (this.selectMode()) return;
+    this.pressOrigin = { x: ev.clientX, y: ev.clientY };
+    this.pressTimer = setTimeout(() => {
+      this.pressTimer = null;
+      this.longPressed = true;
+      this.selectMode.set(true);
+      this.selectedSeries.set(new Set([seriesId]));
+      try {
+        navigator.vibrate?.(30);
+      } catch {
+        /* sem vibração */
+      }
+    }, 500);
+  }
+
+  protected pressMove(ev: PointerEvent): void {
+    if (!this.pressTimer || !this.pressOrigin) return;
+    if (Math.hypot(ev.clientX - this.pressOrigin.x, ev.clientY - this.pressOrigin.y) > 10) {
+      this.pressCancel();
+    }
+  }
+
+  protected pressCancel(): void {
+    if (this.pressTimer) clearTimeout(this.pressTimer);
+    this.pressTimer = null;
+    if (this.longPressed) {
+      // o clique que encerra o "segurar" não pode desmarcar a série recém-marcada
+      this.longPressed = false;
+      this.suppressClickUntil = Date.now() + 250;
+    }
+  }
+
+  protected coverClick(seriesId: string): void {
+    if (Date.now() < this.suppressClickUntil) return;
+    if (this.selectMode()) this.toggleSeries(seriesId);
   }
 
   // ---- menu, diagnóstico e botão Voltar ----

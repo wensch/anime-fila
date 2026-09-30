@@ -191,3 +191,41 @@ describe('scanHistory (janela de 1000 da API)', () => {
     expect(r.capped).toBe(false);
   });
 });
+
+describe('correções da revisão', () => {
+  it('sessão que cai no meio da remoção devolve o que já foi apagado (sem lançar)', async () => {
+    const { cr } = setup();
+    let deletes = 0;
+    request.mockImplementation(async (opts: { url: string; method: string }) => {
+      if (new URL(opts.url).pathname === '/auth/v1/token') return ok({}, 401);
+      if (opts.method === 'DELETE') return ++deletes <= 5 ? ok(null, 204) : ok({}, 401);
+      return ok({});
+    });
+    const ids = Array.from({ length: 12 }, (_, i) => 'e' + i);
+    const out = await cr.deleteEpisodes(ids);
+    expect(out.expired).toBe(true);
+    expect(out.deleted).toHaveLength(5);
+  });
+
+  it('429 ao renovar o token não derruba a sessão', async () => {
+    const { cr, settings } = setup();
+    request.mockImplementation(async (opts: { url: string }) =>
+      new URL(opts.url).pathname === '/auth/v1/token' ? ok({}, 429) : ok({}, 401),
+    );
+    const err = await cr.listHistory(10).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(429);
+    expect(settings.session()).not.toBeNull();
+  });
+
+  it('configurações avançadas: grava só o que mudou e o resto acompanha os padrões', async () => {
+    const { settings } = setup();
+    const { DEFAULT_CONFIG } = await import('./endpoints');
+    settings.setConfig({ ...DEFAULT_CONFIG, locale: 'en-US' });
+    const stored = JSON.parse((globalThis as any).localStorage.getItem('crunchysync.v2'));
+    expect(stored.config).toEqual({ locale: 'en-US' });
+    const again = new SettingsService();
+    expect(again.config().locale).toBe('en-US');
+    expect(again.config().historyPath).toBe(DEFAULT_CONFIG.historyPath);
+  });
+});

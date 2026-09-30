@@ -7,6 +7,8 @@ App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem c
 - **Filtros:** texto, datas, ordenação e "sem assistir há mais de N meses" para achar o que está abandonado; "Carregar até" vai de 100 a 1000 (a API da Crunchyroll só entrega os 1000 episódios mais recentes; a página 11 dá erro 400).
 - **Navegação:** o botão Voltar do Android fecha painéis e menus, sai da seleção e volta de Episódios para Séries antes de sair do app; cada aba tem seus filtros; abas e busca ficam fixas ao rolar; alvos de toque de 48 px.
 - **Capas no aparelho:** as capas das séries são salvas no armazenamento do celular e abrem na hora, sem baixar de novo; as abas ficam montadas, então trocar de aba não recarrega nada.
+- **Seleção rápida:** segure a capa de uma série para começar a selecionar (já marcando aquela); as datas dos cards são relativas ("há 2 dias", o dia exato fica no toque longo do texto no navegador).
+- **Listas longas:** botão "voltar ao topo" e a rolagem de cada aba é lembrada ao ir e voltar de Episódios.
 - **Abertura rápida:** mostra a última lista guardada na hora e atualiza por trás.
 - **Episódios:** lista completa, filtro por texto, intervalo de datas e número do episódio; seleção múltipla para remover episódios avulsos.
 - **Login na página oficial:** o app abre o site da Crunchyroll num WebView; você digita e-mail e senha lá (o app nunca os vê) e a sessão é renovada pelo cookie do site.
@@ -39,7 +41,7 @@ Se falhar: toque em **Diagnóstico** no app. Ele lista cada chamada (método, ca
 ```bash
 cd app
 npm ci --legacy-peer-deps
-npm test                 # agrupamento, filtros, backup e cliente da API (vitest)
+npm test                 # agrupamento, filtros, datas e cliente da API (vitest)
 npm run format:check     # Prettier (também roda no CI)
 npx ng build && npx cap sync android
 ```

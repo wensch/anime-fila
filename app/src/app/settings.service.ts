@@ -121,9 +121,16 @@ export class SettingsService {
 
   private persist(): void {
     try {
-      const data: Stored = {
+      // Só o que difere do padrão: assim, correções de padrão em versões futuras chegam a todos.
+      const cfg = this.config();
+      const overrides = Object.fromEntries(
+        (Object.keys(DEFAULT_CONFIG) as (keyof ApiConfig)[])
+          .filter((k) => cfg[k] !== DEFAULT_CONFIG[k])
+          .map((k) => [k, cfg[k]]),
+      );
+      const data = {
         session: this.session(),
-        config: this.config(),
+        config: overrides,
         deviceId: this.deviceId,
         maxEpisodes: this.maxEpisodes(),
       };

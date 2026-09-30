@@ -72,6 +72,8 @@ export interface Filters {
   epMax: number | null;
   /** "Sem assistir há mais de N meses" (null = qualquer). Itens sem data ficam de fora. */
   olderThanMonths: number | null;
+  /** Só episódios de uma série (usado ao abrir Episódios pelo card da série). */
+  seriesId: string | null;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -81,6 +83,7 @@ export const EMPTY_FILTERS: Filters = {
   epMin: null,
   epMax: null,
   olderThanMonths: null,
+  seriesId: null,
 };
 
 /** Instante (ms) de N meses atrás; itens com data anterior a ele são "antigos". */
@@ -125,6 +128,7 @@ export function filterEpisodes(episodes: Episode[], f: Filters, now = Date.now()
   const cutoff = staleCutoff(now, f.olderThanMonths);
   const kept = episodes.filter((e) => {
     if (q && !norm(`${e.seriesTitle} ${e.episodeTitle ?? ''}`).includes(q)) return false;
+    if (f.seriesId !== null && e.seriesId !== f.seriesId) return false;
     if (!inRange(e.watchedAt, lo, hi)) return false;
     if (!isStale(e.watchedAt, cutoff)) return false;
     if (f.epMin !== null && (e.episodeNumber === null || e.episodeNumber < f.epMin)) return false;

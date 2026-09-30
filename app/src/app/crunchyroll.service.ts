@@ -214,12 +214,18 @@ export class CrunchyrollService {
       const results = await Promise.allSettled(
         chunk.map((id) => this.authed('DELETE', fill(tpl, { account: accountId, id }))),
       );
+      let expired = false;
       results.forEach((r, idx) => {
         if (r.status === 'fulfilled') out.deleted.push(chunk[idx]);
-        else if (r.reason instanceof SessionExpiredError) throw r.reason;
+        else if (r.reason instanceof SessionExpiredError) expired = true;
         else out.failed.push({ id: chunk[idx], error: (r.reason as Error).message });
       });
       opts.onProgress?.(out.deleted.length + out.failed.length, ids.length);
+      if (expired) {
+        // Não lança: o chamador precisa saber o que já foi apagado para atualizar a tela.
+        out.expired = true;
+        break;
+      }
     }
     return out;
   }
@@ -324,7 +330,8 @@ export class CrunchyrollService {
       try {
         return await this.requestToken();
       } catch (e) {
-        if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 403) {
+        // Só 400/401 significam sessão inválida; 429/408 e semelhantes são passageiros.
+        if (e instanceof ApiError && (e.status === 400 || e.status === 401)) {
           this.settings.setSession(null);
           throw new SessionExpiredError('Sessão expirada');
         }

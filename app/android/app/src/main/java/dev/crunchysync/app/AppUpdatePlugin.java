@@ -33,7 +33,7 @@ public class AppUpdatePlugin extends Plugin {
     @PluginMethod
     public void install(PluginCall call) {
         final String url = call.getString("url");
-        if (url == null || !url.startsWith("https://")) {
+        if (url == null || !isAllowedUrl(url)) {
             call.reject("URL inválida", "BAD_URL");
             return;
         }
@@ -59,11 +59,26 @@ public class AppUpdatePlugin extends Plugin {
                 launchInstaller(apk);
                 call.resolve();
             } catch (Exception e) {
+                //noinspection ResultOfMethodCallIgnored
+                new File(new File(ctx.getCacheDir(), "updates"), "CrunchySync.apk").delete();
                 call.reject("Falha no download: " + e.getMessage(), "DOWNLOAD");
             } finally {
                 busy = false;
             }
         }, "apk-update").start();
+    }
+
+    /** Só HTTPS e só os servidores de releases do GitHub. */
+    private static boolean isAllowedUrl(String s) {
+        try {
+            URL u = new URL(s);
+            String h = u.getHost();
+            return "https".equals(u.getProtocol())
+                    && h != null
+                    && (h.equals("github.com") || h.endsWith(".githubusercontent.com"));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private File download(String urlStr) throws IOException {
@@ -72,10 +87,25 @@ public class AppUpdatePlugin extends Plugin {
         dir.mkdirs();
         File out = new File(dir, "CrunchySync.apk");
 
-        HttpURLConnection c = (HttpURLConnection) new URL(urlStr).openConnection();
-        c.setConnectTimeout(15_000);
-        c.setReadTimeout(30_000);
-        c.setInstanceFollowRedirects(true); // github.com -> objects.githubusercontent.com (https -> https)
+        // Redirecionamentos seguidos à mão: todo destino precisa estar na lista de hosts do GitHub.
+        URL url = new URL(urlStr);
+        HttpURLConnection c = null;
+        for (int hop = 0; ; hop++) {
+            if (hop > 5 || !isAllowedUrl(url.toString())) throw new IOException("endereço não permitido");
+            c = (HttpURLConnection) url.openConnection();
+            c.setConnectTimeout(15_000);
+            c.setReadTimeout(30_000);
+            c.setInstanceFollowRedirects(false);
+            int status = c.getResponseCode();
+            if (status >= 300 && status < 400) {
+                String location = c.getHeaderField("Location");
+                c.disconnect();
+                if (location == null) throw new IOException("redirecionamento sem destino");
+                url = new URL(url, location);
+                continue;
+            }
+            break;
+        }
         try {
             int code = c.getResponseCode();
             if (code != 200) throw new IOException("HTTP " + code);

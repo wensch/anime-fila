@@ -24,6 +24,7 @@ export class CoverCacheService {
 
   private readonly hashes = new Map<string, string>();
   private syncing = false;
+  private pending: Record<string, string> | null = null;
 
   /** Lê do disco as capas já salvas. */
   async init(): Promise<void> {
@@ -51,7 +52,11 @@ export class CoverCacheService {
 
   /** Baixa para o disco as capas que faltam ou mudaram. `urls`: id da série -> URL da capa. */
   async sync(urls: Record<string, string>): Promise<void> {
-    if (!this.native || this.syncing) return;
+    if (!this.native) return;
+    if (this.syncing) {
+      this.pending = urls; // roda de novo quando o atual terminar
+      return;
+    }
     const queue = Object.entries(urls).filter(
       ([id, url]) => this.hashes.get(keyOf(id)) !== hashUrl(url),
     );
@@ -79,6 +84,9 @@ export class CoverCacheService {
     this.diag.log(
       `capas: ${ok} salvas no aparelho, ${failed} falharam${firstError ? ` (${firstError})` : ''}`,
     );
+    const next = this.pending;
+    this.pending = null;
+    if (next) await this.sync(next);
   }
 
   private async download(seriesId: string, url: string): Promise<void> {

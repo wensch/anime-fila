@@ -64,6 +64,9 @@
               Sair da conta
             </button>
           }
+          <p class="px-3 py-2 text-xs text-zinc-400">
+            Versão {{ update.currentBuild > 0 ? '#' + update.currentBuild : 'local' }}
+          </p>
         </div>
       }
     </div>
@@ -423,9 +426,12 @@
           </p>
         }
         @if (visibleSeries().length === 0) {
-          <p class="py-10 text-center text-zinc-400">
-            {{ loaded() ? 'Nenhuma série encontrada.' : '' }}
-          </p>
+          <div class="flex flex-col items-center gap-3 py-10 text-center text-zinc-400">
+            <p>{{ loaded() ? 'Nenhuma série encontrada.' : '' }}</p>
+            @if (loaded() && hasFilters()) {
+              <button type="button" class="btn" (click)="clearFilters()">Limpar filtros</button>
+            }
+          </div>
         } @else {
           <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
             <span class="flex min-w-0 flex-wrap items-center gap-x-2">
@@ -479,8 +485,14 @@
                 [class.ring-orange-500]="selectedSeries().has(s.seriesId)"
               >
                 <div
-                  class="relative aspect-video bg-zinc-800"
-                  (click)="selectMode() && toggleSeries(s.seriesId)"
+                  class="relative aspect-video select-none bg-zinc-800 [-webkit-touch-callout:none]"
+                  (click)="coverClick(s.seriesId)"
+                  (pointerdown)="pressStart($event, s.seriesId)"
+                  (pointermove)="pressMove($event)"
+                  (pointerup)="pressCancel()"
+                  (pointerleave)="pressCancel()"
+                  (pointercancel)="pressCancel()"
+                  (contextmenu)="$event.preventDefault()"
                 >
                   @if (coverSrc(s); as src) {
                     <img
@@ -520,7 +532,10 @@
                   <p class="text-xs text-zinc-400">
                     {{ plural(s.episodeCount, 'episódio', 'episódios') }}
                     @if (s.lastWatchedAt) {
-                      · {{ s.lastWatchedAt | date: 'dd/MM/yyyy' }}
+                      ·
+                      <span [attr.title]="s.lastWatchedAt | date: 'dd/MM/yyyy HH:mm'">{{
+                        relative(s.lastWatchedAt)
+                      }}</span>
                     }
                   </p>
                   @if (!selectMode()) {
@@ -530,7 +545,7 @@
                         class="btn px-2"
                         [attr.aria-label]="'Ver episódios de ' + s.title"
                         title="Ver episódios"
-                        (click)="showSeriesEpisodes(s.title)"
+                        (click)="showSeriesEpisodes(s.seriesId, s.title)"
                       >
                         <svg
                           viewBox="0 0 24 24"
@@ -582,9 +597,12 @@
           </p>
         }
         @if (visibleEpisodes().length === 0) {
-          <p class="py-10 text-center text-zinc-400">
-            {{ loaded() ? 'Nenhum episódio encontrado.' : '' }}
-          </p>
+          <div class="flex flex-col items-center gap-3 py-10 text-center text-zinc-400">
+            <p>{{ loaded() ? 'Nenhum episódio encontrado.' : '' }}</p>
+            @if (loaded() && hasFilters()) {
+              <button type="button" class="btn" (click)="clearFilters()">Limpar filtros</button>
+            }
+          </div>
         } @else {
           <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
             <span class="flex min-w-0 flex-wrap items-center gap-x-2">
@@ -653,6 +671,31 @@
   }
 </main>
 
+@if (scrolled() && !pending() && !scanning()) {
+  <button
+    type="button"
+    class="icon-btn fixed right-4 z-10 border border-zinc-700 bg-zinc-900/95 shadow-lg"
+    [style.bottom]="
+      actionBarVisible() || notice() ? '6rem' : 'max(1rem, env(safe-area-inset-bottom))'
+    "
+    aria-label="Voltar ao topo"
+    (click)="scrollToTop()"
+  >
+    <svg
+      viewBox="0 0 24 24"
+      class="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  </button>
+}
+
 @if (notice(); as msg) {
   <div
     role="status"
@@ -702,7 +745,10 @@
 
 @if (scanning()) {
   <div class="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4" role="status">
-    <div class="w-full max-w-sm space-y-2 rounded-2xl bg-zinc-900 p-5 text-center">
+    <div
+      appDialogFocus
+      class="w-full max-w-sm space-y-2 rounded-2xl bg-zinc-900 p-5 text-center outline-none"
+    >
       <p class="text-sm font-medium">Conferindo o histórico completo…</p>
       <p class="text-xs text-zinc-400">
         Para remover todos os episódios das séries, inclusive os fora da lista carregada.
@@ -717,7 +763,7 @@
     role="dialog"
     aria-modal="true"
   >
-    <div class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5">
+    <div appDialogFocus class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5 outline-none">
       <h2 class="text-lg font-semibold">Remover do histórico?</h2>
       <p class="text-sm text-zinc-300">{{ pendingText() }} Esta ação não pode ser desfeita.</p>
 
@@ -778,7 +824,7 @@
     role="dialog"
     aria-modal="true"
   >
-    <div class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5">
+    <div appDialogFocus class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5 outline-none">
       <h2 class="text-lg font-semibold">Nova versão disponível</h2>
       <p class="text-sm text-zinc-300">
         O build #{{ build }} está disponível (você tem o #{{ update.currentBuild }}). O app baixa a

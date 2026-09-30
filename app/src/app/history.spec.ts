@@ -183,3 +183,16 @@ describe('filtro "sem assistir há X meses"', () => {
     expect(out.map((s) => s.seriesId)).toEqual(['C', 'B']);
   });
 });
+
+describe('filtro exato por série', () => {
+  const eps = [
+    ep('1', 'A', '2026-09-01T00:00:00Z'),
+    { ...ep('2', 'B', '2026-09-02T00:00:00Z'), seriesTitle: 'Naruto Shippuden' },
+    { ...ep('3', 'A', '2026-09-03T00:00:00Z'), seriesTitle: 'Naruto' },
+  ];
+  it('não mistura séries de títulos parecidos', () => {
+    const out = filterEpisodes(eps, { ...EMPTY_FILTERS, seriesId: 'A' });
+    expect(out.map((e) => e.episodeId)).toEqual(['3', '1']);
+    expect(filterEpisodes(eps, { ...EMPTY_FILTERS, query: 'Naruto' })).toHaveLength(2);
+  });
+});
