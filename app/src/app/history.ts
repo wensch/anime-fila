@@ -70,9 +70,32 @@ export interface Filters {
   /** Só episódios: intervalo de número do episódio. */
   epMin: number | null;
   epMax: number | null;
+  /** "Sem assistir há mais de N meses" (null = qualquer). Itens sem data ficam de fora. */
+  olderThanMonths: number | null;
 }
 
-export const EMPTY_FILTERS: Filters = { query: '', from: '', to: '', epMin: null, epMax: null };
+export const EMPTY_FILTERS: Filters = {
+  query: '',
+  from: '',
+  to: '',
+  epMin: null,
+  epMax: null,
+  olderThanMonths: null,
+};
+
+/** Instante (ms) de N meses atrás; itens com data anterior a ele são "antigos". */
+function staleCutoff(now: number, months: number | null): number {
+  if (months === null) return Infinity;
+  const d = new Date(now);
+  d.setMonth(d.getMonth() - months);
+  return d.getTime();
+}
+
+function isStale(iso: string | null, cutoff: number): boolean {
+  if (cutoff === Infinity) return true;
+  const t = time(iso);
+  return t !== 0 && t < cutoff;
+}
 
 function dayBounds(f: Filters): [number, number] {
   const parse = (s: string, end: boolean) => {
@@ -84,7 +107,11 @@ function dayBounds(f: Filters): [number, number] {
   return [parse(f.from, false), parse(f.to, true)];
 }
 
-const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const norm = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
 
 function inRange(iso: string | null, lo: number, hi: number): boolean {
   if (lo === -Infinity && hi === Infinity) return true;
@@ -92,12 +119,14 @@ function inRange(iso: string | null, lo: number, hi: number): boolean {
   return t !== 0 && t >= lo && t <= hi;
 }
 
-export function filterEpisodes(episodes: Episode[], f: Filters): Episode[] {
+export function filterEpisodes(episodes: Episode[], f: Filters, now = Date.now()): Episode[] {
   const q = norm(f.query.trim());
   const [lo, hi] = dayBounds(f);
+  const cutoff = staleCutoff(now, f.olderThanMonths);
   const kept = episodes.filter((e) => {
     if (q && !norm(`${e.seriesTitle} ${e.episodeTitle ?? ''}`).includes(q)) return false;
     if (!inRange(e.watchedAt, lo, hi)) return false;
+    if (!isStale(e.watchedAt, cutoff)) return false;
     if (f.epMin !== null && (e.episodeNumber === null || e.episodeNumber < f.epMin)) return false;
     if (f.epMax !== null && (e.episodeNumber === null || e.episodeNumber > f.epMax)) return false;
     return true;
@@ -108,11 +137,20 @@ export function filterEpisodes(episodes: Episode[], f: Filters): Episode[] {
 
 export type SeriesSort = 'recent' | 'oldest' | 'title' | 'count';
 
-export function filterSeries(series: Series[], f: Filters, sort: SeriesSort): Series[] {
+export function filterSeries(
+  series: Series[],
+  f: Filters,
+  sort: SeriesSort,
+  now = Date.now(),
+): Series[] {
   const q = norm(f.query.trim());
   const [lo, hi] = dayBounds(f);
+  const cutoff = staleCutoff(now, f.olderThanMonths);
   const out = series.filter(
-    (s) => (!q || norm(s.title).includes(q)) && inRange(s.lastWatchedAt, lo, hi),
+    (s) =>
+      (!q || norm(s.title).includes(q)) &&
+      inRange(s.lastWatchedAt, lo, hi) &&
+      isStale(s.lastWatchedAt, cutoff),
   );
   const by: Record<SeriesSort, (a: Series, b: Series) => number> = {
     recent: (a, b) => time(b.lastWatchedAt) - time(a.lastWatchedAt),

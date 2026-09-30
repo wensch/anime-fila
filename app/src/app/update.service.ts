@@ -23,7 +23,17 @@ export class UpdateService {
   /** Resultado da última checagem manual, para mostrar ao usuário. */
   readonly lastResult = signal<string | null>(null);
 
+  private lastCheckAt = 0;
+
+  /** Checa ao voltar ao app, no máximo a cada 10 minutos e sem interromper um download. */
+  async checkIfDue(): Promise<void> {
+    if (this.progress() !== null || this.available() !== null) return;
+    if (Date.now() - this.lastCheckAt < 10 * 60_000) return;
+    await this.check();
+  }
+
   async check(): Promise<void> {
+    this.lastCheckAt = Date.now();
     if (this.currentBuild <= 0) {
       this.lastResult.set('Build local: sem checagem de atualização.');
       return;
@@ -40,13 +50,19 @@ export class UpdateService {
       const remote = res.status === 200 ? parseBuildNumber(res.data?.body) : null;
       const asset = (res.data?.assets ?? []).find((a: any) => /\.apk$/i.test(a?.name ?? ''));
       this.downloadUrl = asset?.browser_download_url ?? null;
-      this.diag.log(`atualização: instalado #${this.currentBuild}, disponível #${remote ?? '?'} (HTTP ${res.status})`);
+      this.diag.log(
+        `atualização: instalado #${this.currentBuild}, disponível #${remote ?? '?'} (HTTP ${res.status})`,
+      );
       if (isNewer(remote, this.currentBuild)) {
         this.available.set(remote);
         this.lastResult.set(`Nova versão disponível: #${remote}.`);
       } else {
         this.available.set(null);
-        this.lastResult.set(res.status === 200 ? 'Você está na versão mais recente.' : `Não foi possível checar (HTTP ${res.status}).`);
+        this.lastResult.set(
+          res.status === 200
+            ? 'Você está na versão mais recente.'
+            : `Não foi possível checar (HTTP ${res.status}).`,
+        );
       }
     } catch (e) {
       this.diag.log(`atualização: falha ao checar (${(e as Error).message})`);

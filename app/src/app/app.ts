@@ -3,7 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { BackupService } from './backup.service';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
-import { ApiConfig, EPISODE_LIMITS, FULL_SCAN_LIMIT } from './endpoints';
+import { ApiConfig, EPISODE_LIMITS, FULL_SCAN_LIMIT, limitLabel } from './endpoints';
 import {
   EMPTY_FILTERS,
   Filters,
@@ -71,6 +71,8 @@ export class App {
   protected readonly challenge = signal(false);
 
   protected readonly limits = EPISODE_LIMITS;
+  protected readonly limitLabel = limitLabel;
+  protected readonly staleOptions = [1, 3, 6, 12];
   protected readonly showDiag = signal(false);
   protected readonly showAdvanced = signal(false);
   protected readonly copied = signal(false);
@@ -80,16 +82,28 @@ export class App {
 
   protected readonly allSeries = computed(() => {
     const covers = this.covers();
-    return groupBySeries(this.episodes()).map((s) => ({ ...s, coverUrl: covers[s.seriesId] ?? s.coverUrl }));
+    return groupBySeries(this.episodes()).map((s) => ({
+      ...s,
+      coverUrl: covers[s.seriesId] ?? s.coverUrl,
+    }));
   });
   protected readonly visibleSeries = computed(() =>
     filterSeries(this.allSeries(), this.filters(), this.sort()),
   );
-  protected readonly visibleEpisodes = computed(() => filterEpisodes(this.episodes(), this.filters()));
+  protected readonly visibleEpisodes = computed(() =>
+    filterEpisodes(this.episodes(), this.filters()),
+  );
   protected readonly shownEpisodes = computed(() => this.visibleEpisodes().slice(0, this.limit()));
   protected readonly hasFilters = computed(() => {
     const f = this.filters();
-    return !!(f.query || f.from || f.to || f.epMin !== null || f.epMax !== null);
+    return !!(
+      f.query ||
+      f.from ||
+      f.to ||
+      f.epMin !== null ||
+      f.epMax !== null ||
+      f.olderThanMonths !== null
+    );
   });
 
   protected readonly pendingText = computed(() => {
@@ -106,7 +120,19 @@ export class App {
 
   constructor() {
     void this.update.check();
-    if (this.loggedIn()) void this.refresh();
+    // Ao voltar ao app (vindo de outro), confere de novo se há versão nova.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void this.update.checkIfDue();
+    });
+    if (this.loggedIn()) {
+      // Mostra na hora a última lista guardada e atualiza por trás.
+      const cached = this.settings.loadHistoryCache();
+      if (cached.length > 0) {
+        this.episodes.set(cached);
+        this.loaded.set(true);
+      }
+      void this.refresh();
+    }
   }
 
   // ---- sessão ----
@@ -126,6 +152,7 @@ export class App {
 
   protected async logout(): Promise<void> {
     await this.cr.logout();
+    this.settings.clearHistoryCache();
     this.episodes.set([]);
     this.loaded.set(false);
     this.selected.set(new Set());
@@ -149,6 +176,7 @@ export class App {
     this.error.set(null);
     try {
       this.episodes.set(await this.cr.listHistory(this.settings.maxEpisodes()));
+      this.settings.saveHistoryCache(this.episodes());
       this.loaded.set(true);
       this.selected.set(new Set());
       this.selectedSeries.set(new Set());
@@ -227,7 +255,8 @@ export class App {
     } catch (e) {
       const msg = (e as Error).message ?? '';
       // Fechar o menu Compartilhar sem escolher nada não é erro.
-      if (!/cancel/i.test(msg)) this.error.set('Não foi possível gerar a cópia. Você ainda pode remover sem ela.');
+      if (!/cancel/i.test(msg))
+        this.error.set('Não foi possível gerar a cópia. Você ainda pode remover sem ela.');
     } finally {
       this.backupBusy.set(false);
     }
@@ -252,6 +281,7 @@ export class App {
       });
       const gone = new Set(deleted);
       this.episodes.update((list) => list.filter((e) => !gone.has(e.episodeId)));
+      this.settings.saveHistoryCache(this.episodes());
       this.selected.update((s) => new Set([...s].filter((id) => !gone.has(id))));
       if (p.kind === 'series') this.selectMode.set(false);
       const alive = new Set(this.allSeries().map((s) => s.seriesId));
@@ -289,6 +319,11 @@ export class App {
     if (!EPISODE_LIMITS.includes(n) || n === this.settings.maxEpisodes()) return;
     this.settings.setMaxEpisodes(n);
     void this.refresh();
+  }
+
+  protected setStale(raw: string): void {
+    const n = Number(raw);
+    this.setFilter({ olderThanMonths: raw === '' || !Number.isFinite(n) ? null : n });
   }
 
   protected clearFilters(): void {

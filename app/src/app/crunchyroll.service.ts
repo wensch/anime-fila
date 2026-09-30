@@ -72,7 +72,8 @@ export class CrunchyrollService {
         err ? reject(err) : resolve();
       };
       void PageFetch.addListener('pageFinished', async ({ url }) => {
-        if (trying || finished || /\/(login|register|forgot|password)/.test(new URL(url).pathname)) return;
+        if (trying || finished || /\/(login|register|forgot|password)/.test(new URL(url).pathname))
+          return;
         trying = true;
         try {
           await this.requestToken();
@@ -123,7 +124,11 @@ export class CrunchyrollService {
     const maxPages = Math.ceil(max / PAGE_SIZE) + 2; // folga para páginas com repetidos
     for (let page = 1; page <= maxPages; page++) {
       const body: any = await this.authed('GET', path, {
-        params: { page: String(page), page_size: String(PAGE_SIZE), locale: this.settings.config().locale },
+        params: {
+          page: String(page),
+          page_size: String(PAGE_SIZE),
+          locale: this.settings.config().locale,
+        },
       });
       const data: any[] = body?.data ?? [];
       const before = byId.size;
@@ -150,7 +155,10 @@ export class CrunchyrollService {
     const tpl = this.settings.config().objectsPath;
     const locale = this.settings.config().locale;
     for (let i = 0; i < seriesIds.length; i += 20) {
-      const ids = seriesIds.slice(i, i + 20).map(encodeURIComponent).join(',');
+      const ids = seriesIds
+        .slice(i, i + 20)
+        .map(encodeURIComponent)
+        .join(',');
       try {
         const body = await this.authed('GET', tpl.replace('{ids}', ids), { params: { locale } });
         Object.assign(covers, extractSeriesCovers(body));
@@ -338,7 +346,9 @@ export class CrunchyrollService {
       if ((res.status === 429 || res.status >= 500) && retries < MAX_RETRIES) {
         const wait = 1000 * 2 ** retries; // 1s, 2s, 4s
         retries++;
-        this.diag.log(`${method} ${path}: ${res.status}, nova tentativa ${retries}/${MAX_RETRIES} em ${wait / 1000}s`);
+        this.diag.log(
+          `${method} ${path}: ${res.status}, nova tentativa ${retries}/${MAX_RETRIES} em ${wait / 1000}s`,
+        );
         await sleep(wait);
         continue;
       }

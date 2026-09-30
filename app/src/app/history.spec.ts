@@ -17,11 +17,27 @@ const raw = (id: string, seriesId: string, played: string | null, num = 1) => ({
   panel: {
     id,
     title: `Ep ${id}`,
-    episode_metadata: { series_id: seriesId, series_title: `Série ${seriesId}`, episode_number: num },
-    images: { thumbnail: [[{ width: 320, source: `small-${id}` }, { width: 1280, source: `big-${id}` }]] },
+    episode_metadata: {
+      series_id: seriesId,
+      series_title: `Série ${seriesId}`,
+      episode_number: num,
+    },
+    images: {
+      thumbnail: [
+        [
+          { width: 320, source: `small-${id}` },
+          { width: 1280, source: `big-${id}` },
+        ],
+      ],
+    },
   },
 });
-const ep = (id: string, seriesId: string, played: string | null, num: number | null = 1): Episode => ({
+const ep = (
+  id: string,
+  seriesId: string,
+  played: string | null,
+  num: number | null = 1,
+): Episode => ({
   episodeId: id,
   seriesId,
   seriesTitle: `Série ${seriesId}`,
@@ -45,7 +61,9 @@ describe('normalização', () => {
 describe('groupBySeries', () => {
   it('consolida 12 episódios em 1 série', () => {
     const eps = Array.from({ length: 12 }, (_, i) =>
-      normalizeHistoryItem(raw(`e${i}`, 'S1', `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`))!,
+      normalizeHistoryItem(
+        raw(`e${i}`, 'S1', `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`),
+      )!,
     );
     const out = groupBySeries(eps);
     expect(out).toHaveLength(1);
@@ -80,26 +98,43 @@ describe('filtros', () => {
     expect(r.map((e) => e.episodeId)).toEqual(['3', '2']);
   });
   it('ordena do mais recente ao mais antigo, sem data por último', () => {
-    expect(filterEpisodes(eps, EMPTY_FILTERS).map((e) => e.episodeId)).toEqual(['3', '2', '1', '4']);
+    expect(filterEpisodes(eps, EMPTY_FILTERS).map((e) => e.episodeId)).toEqual([
+      '3',
+      '2',
+      '1',
+      '4',
+    ]);
   });
   it('filtro de data exclui episódios sem data', () => {
-    expect(filterEpisodes(eps, { ...EMPTY_FILTERS, from: '2020-01-01' }).map((e) => e.episodeId)).not.toContain('4');
+    expect(
+      filterEpisodes(eps, { ...EMPTY_FILTERS, from: '2020-01-01' }).map((e) => e.episodeId),
+    ).not.toContain('4');
   });
   it('por número do episódio', () => {
-    expect(filterEpisodes(eps, { ...EMPTY_FILTERS, epMin: 2, epMax: 10 }).map((e) => e.episodeId)).toEqual(['3', '2']);
+    expect(
+      filterEpisodes(eps, { ...EMPTY_FILTERS, epMin: 2, epMax: 10 }).map((e) => e.episodeId),
+    ).toEqual(['3', '2']);
   });
   it('séries: filtro por data e ordenação', () => {
     const series = groupBySeries(eps);
-    expect(filterSeries(series, { ...EMPTY_FILTERS, to: '2026-01-31' }, 'recent').map((s) => s.seriesId)).toEqual(['A']);
+    expect(
+      filterSeries(series, { ...EMPTY_FILTERS, to: '2026-01-31' }, 'recent').map((s) => s.seriesId),
+    ).toEqual(['A']);
     expect(filterSeries(series, EMPTY_FILTERS, 'title').map((s) => s.seriesId)).toEqual(['A', 'B']);
-    expect(filterSeries(series, EMPTY_FILTERS, 'oldest').map((s) => s.seriesId)).toEqual(['A', 'B']);
+    expect(filterSeries(series, EMPTY_FILTERS, 'oldest').map((s) => s.seriesId)).toEqual([
+      'A',
+      'B',
+    ]);
   });
 });
 
 describe('capas de série', () => {
   const img = (w: number) => ({ width: w, source: `w${w}` });
   it('prefere poster_wide e o menor tamanho >= 640', () => {
-    const images = { poster_wide: [[img(320), img(1920), img(800), img(640)]], poster_tall: [[img(1000)]] };
+    const images = {
+      poster_wide: [[img(320), img(1920), img(800), img(640)]],
+      poster_tall: [[img(1000)]],
+    };
     expect(pickSeriesCover(images)).toBe('w640');
   });
   it('cai para poster_tall e para o maior disponível', () => {
@@ -107,7 +142,13 @@ describe('capas de série', () => {
     expect(pickSeriesCover({})).toBeNull();
   });
   it('extrai mapa id -> capa ignorando itens sem imagem', () => {
-    const body = { data: [{ id: 'A', images: { poster_wide: [[img(800)]] } }, { id: 'B', images: {} }, { images: {} }] };
+    const body = {
+      data: [
+        { id: 'A', images: { poster_wide: [[img(800)]] } },
+        { id: 'B', images: {} },
+        { images: {} },
+      ],
+    };
     expect(extractSeriesCovers(body)).toEqual({ A: 'w800' });
   });
 });
@@ -117,5 +158,28 @@ describe('episodesOfSeries', () => {
     const eps = [ep('1', 'A', null), ep('2', 'B', null), ep('3', 'A', null), ep('4', 'C', null)];
     expect(episodesOfSeries(eps, ['A', 'C']).map((e) => e.episodeId)).toEqual(['1', '3', '4']);
     expect(episodesOfSeries(eps, [])).toEqual([]);
+  });
+});
+
+describe('filtro "sem assistir há X meses"', () => {
+  const now = Date.parse('2026-09-30T12:00:00Z');
+  const eps = [
+    ep('novo', 'A', '2026-09-20T12:00:00Z'),
+    ep('4m', 'B', '2026-05-20T12:00:00Z'),
+    ep('8m', 'C', '2026-01-20T12:00:00Z'),
+    ep('semdata', 'D', null),
+  ];
+  it('episódios: só os mais antigos que o corte; sem data ficam de fora', () => {
+    const f = { ...EMPTY_FILTERS, olderThanMonths: 3 };
+    expect(filterEpisodes(eps, f, now).map((e) => e.episodeId)).toEqual(['4m', '8m']);
+    expect(
+      filterEpisodes(eps, { ...EMPTY_FILTERS, olderThanMonths: 6 }, now).map((e) => e.episodeId),
+    ).toEqual(['8m']);
+    expect(filterEpisodes(eps, EMPTY_FILTERS, now)).toHaveLength(4);
+  });
+  it('séries: usa a última vez assistida', () => {
+    const series = groupBySeries(eps);
+    const out = filterSeries(series, { ...EMPTY_FILTERS, olderThanMonths: 3 }, 'oldest', now);
+    expect(out.map((s) => s.seriesId)).toEqual(['C', 'B']);
   });
 });

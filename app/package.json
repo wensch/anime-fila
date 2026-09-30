@@ -8,7 +8,9 @@
     "watch": "ng build --watch --configuration development",
     "test": "vitest run",
     "cap:sync": "ng build && cap sync android",
-    "cap:open": "cap open android"
+    "cap:open": "cap open android",
+    "format": "prettier --write \"src/**/*.{ts,html,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,html,css}\""
   },
   "private": true,
   "packageManager": "npm@10.9.7",
@@ -34,7 +36,7 @@
     "@capacitor/cli": "^8.5.2",
     "@tailwindcss/postcss": "^4.3.3",
     "postcss": "^8.5.28",
-    "prettier": "^3.8.1",
+    "prettier": "^3.9.9",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.9.2",
     "vitest": "^5.0.3"

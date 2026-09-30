@@ -1,9 +1,13 @@
 <main class="mx-auto max-w-5xl px-4 pb-24 pt-[max(1rem,env(safe-area-inset-top))]">
   <header class="flex items-center justify-between gap-3 py-3">
-    <h1 class="text-xl font-bold tracking-tight">Crunchy<span class="text-orange-500">Sync</span></h1>
+    <h1 class="text-xl font-bold tracking-tight">
+      Crunchy<span class="text-orange-500">Sync</span>
+    </h1>
     <div class="flex gap-2">
       @if (loggedIn()) {
-        <button type="button" class="btn" [disabled]="loading()" (click)="refresh()">Atualizar</button>
+        <button type="button" class="btn" [disabled]="loading()" (click)="refresh()">
+          Atualizar
+        </button>
       }
       <button type="button" class="btn" (click)="showDiag.set(!showDiag())">Diagnóstico</button>
     </div>
@@ -14,36 +18,86 @@
       <div class="mb-2 flex items-center justify-between">
         <h2 class="text-sm font-semibold">Diagnóstico</h2>
         <div class="flex gap-2">
-          <button type="button" class="btn" (click)="copyLog()">{{ copied() ? 'Copiado!' : 'Copiar' }}</button>
+          <button type="button" class="btn" (click)="copyLog()">
+            {{ copied() ? 'Copiado!' : 'Copiar' }}
+          </button>
           <button type="button" class="btn" (click)="diag.clear()">Limpar</button>
         </div>
       </div>
-      <pre class="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-zinc-950 p-2 text-[11px] text-zinc-300">{{ diag.asText() || 'Nenhuma chamada ainda.' }}</pre>
+      <pre
+        class="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-zinc-950 p-2 text-[11px] text-zinc-300"
+        >{{ diag.asText() || 'Nenhuma chamada ainda.' }}</pre>
       <div class="mt-3 flex items-center justify-between gap-2 text-xs text-zinc-400">
-        <span>Versão instalada: {{ update.currentBuild ? '#' + update.currentBuild : 'local' }}</span>
-        <button type="button" class="btn" [disabled]="update.checking()" (click)="update.check()">Verificar atualização</button>
+        <span
+          >Versão instalada: {{ update.currentBuild ? '#' + update.currentBuild : 'local' }}</span
+        >
+        <button type="button" class="btn" [disabled]="update.checking()" (click)="update.check()">
+          Verificar atualização
+        </button>
       </div>
       @if (update.lastResult(); as r) {
         <p class="mt-1 text-xs text-zinc-400">{{ r }}</p>
       }
-      <p class="mt-2 text-xs text-zinc-500">Nunca contém senha ou token. Se algo falhar, envie um print desta tela.</p>
+      <p class="mt-2 text-xs text-zinc-500">
+        Nunca contém senha ou token. Se algo falhar, envie um print desta tela.
+      </p>
 
-      <button type="button" class="mt-3 text-xs text-orange-400 underline" (click)="showAdvanced.set(!showAdvanced())">
+      <button
+        type="button"
+        class="mt-3 text-xs text-orange-400 underline"
+        (click)="showAdvanced.set(!showAdvanced())"
+      >
         Configurações avançadas da API
       </button>
       @if (showAdvanced()) {
-        <form class="mt-3 space-y-2 text-xs"
-          (submit)="$event.preventDefault(); saveConfig({ baseUrl: bu.value, basicAuth: ba.value, mePath: mp.value, historyPath: hp.value, deletePath: dp.value, objectsPath: op.value, locale: lc.value })">
-          <label class="block">URL base<input #bu class="field" [value]="settings.config().baseUrl" /></label>
-          <label class="block">Cliente OAuth (base64)<input #ba class="field" [value]="settings.config().basicAuth" /></label>
-          <label class="block">Caminho /me<input #mp class="field" [value]="settings.config().mePath" /></label>
-          <label class="block">Caminho do histórico<input #hp class="field" [value]="settings.config().historyPath" /></label>
-          <label class="block">Caminho de exclusão<input #dp class="field" [value]="settings.config().deletePath" /></label>
-          <label class="block">Caminho das capas de séries<input #op class="field" [value]="settings.config().objectsPath" /></label>
-          <label class="block">Idioma<input #lc class="field" [value]="settings.config().locale" /></label>
+        <form
+          class="mt-3 space-y-2 text-xs"
+          (submit)="
+            $event.preventDefault();
+            saveConfig({
+              baseUrl: bu.value,
+              basicAuth: ba.value,
+              mePath: mp.value,
+              historyPath: hp.value,
+              deletePath: dp.value,
+              objectsPath: op.value,
+              locale: lc.value,
+            })
+          "
+        >
+          <label class="block"
+            >URL base<input #bu class="field" [value]="settings.config().baseUrl"
+          /></label>
+          <label class="block"
+            >Cliente OAuth (base64)<input #ba class="field" [value]="settings.config().basicAuth"
+          /></label>
+          <label class="block"
+            >Caminho /me<input #mp class="field" [value]="settings.config().mePath"
+          /></label>
+          <label class="block"
+            >Caminho do histórico<input #hp class="field" [value]="settings.config().historyPath"
+          /></label>
+          <label class="block"
+            >Caminho de exclusão<input #dp class="field" [value]="settings.config().deletePath"
+          /></label>
+          <label class="block"
+            >Caminho das capas de séries<input
+              #op
+              class="field"
+              [value]="settings.config().objectsPath"
+          /></label>
+          <label class="block"
+            >Idioma<input #lc class="field" [value]="settings.config().locale"
+          /></label>
           <div class="flex gap-2">
             <button type="submit" class="btn-primary">Salvar</button>
-            <button type="button" class="btn" (click)="settings.resetConfig(); showAdvanced.set(false)">Restaurar padrão</button>
+            <button
+              type="button"
+              class="btn"
+              (click)="settings.resetConfig(); showAdvanced.set(false)"
+            >
+              Restaurar padrão
+            </button>
           </div>
         </form>
       }
@@ -51,22 +105,39 @@
   }
 
   @if (error(); as msg) {
-    <div role="alert" class="mb-4 space-y-2 rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
+    <div
+      role="alert"
+      class="mb-4 space-y-2 rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200"
+    >
       <p>{{ msg }}</p>
       @if (challenge()) {
-        <button type="button" class="btn-primary" (click)="resolveChallenge()">Concluir verificação</button>
+        <button type="button" class="btn-primary" (click)="resolveChallenge()">
+          Concluir verificação
+        </button>
       }
     </div>
   }
   @if (notice(); as msg) {
-    <p role="status" class="mb-4 flex items-center justify-between rounded-lg border border-emerald-900 bg-emerald-950 px-3 py-2 text-sm text-emerald-200">
+    <p
+      role="status"
+      class="mb-4 flex items-center justify-between rounded-lg border border-emerald-900 bg-emerald-950 px-3 py-2 text-sm text-emerald-200"
+    >
       {{ msg }}
-      <button type="button" class="ml-3 text-emerald-400" aria-label="Fechar" (click)="notice.set(null)">✕</button>
+      <button
+        type="button"
+        class="ml-3 text-emerald-400"
+        aria-label="Fechar"
+        (click)="notice.set(null)"
+      >
+        ✕
+      </button>
     </p>
   }
 
   @if (!loggedIn()) {
-    <section class="mx-auto mt-6 max-w-sm space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+    <section
+      class="mx-auto mt-6 max-w-sm space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5"
+    >
       <h2 class="text-lg font-semibold">Entrar na Crunchyroll</h2>
       <p class="text-sm text-zinc-300">
         Vai abrir a página oficial da Crunchyroll dentro do app. Entre com seu e-mail e senha
@@ -84,29 +155,69 @@
     </section>
   } @else {
     <nav class="mb-3 grid grid-cols-2 gap-2" aria-label="Visualização">
-      <button type="button" class="tab" [class.tab-on]="tab() === 'series'" (click)="tab.set('series')">
+      <button
+        type="button"
+        class="tab"
+        [class.tab-on]="tab() === 'series'"
+        (click)="tab.set('series')"
+      >
         Séries ({{ allSeries().length }})
       </button>
-      <button type="button" class="tab" [class.tab-on]="tab() === 'episodes'" (click)="tab.set('episodes')">
+      <button
+        type="button"
+        class="tab"
+        [class.tab-on]="tab() === 'episodes'"
+        (click)="tab.set('episodes')"
+      >
         Episódios ({{ episodes().length }})
       </button>
     </nav>
 
     <section class="mb-4 space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-      <input type="search" placeholder="Buscar por série ou episódio…" class="field"
-        [value]="filters().query" (input)="setFilter({ query: $any($event.target).value })" />
+      <input
+        type="search"
+        placeholder="Buscar por série ou episódio…"
+        class="field"
+        [value]="filters().query"
+        (input)="setFilter({ query: $any($event.target).value })"
+      />
       <div class="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-        <label>De<input type="date" class="field" [value]="filters().from"
-          (input)="setFilter({ from: $any($event.target).value })" /></label>
-        <label>Até<input type="date" class="field" [value]="filters().to"
-          (input)="setFilter({ to: $any($event.target).value })" /></label>
+        <label
+          >De<input
+            type="date"
+            class="field"
+            [value]="filters().from"
+            (input)="setFilter({ from: $any($event.target).value })"
+        /></label>
+        <label
+          >Até<input
+            type="date"
+            class="field"
+            [value]="filters().to"
+            (input)="setFilter({ to: $any($event.target).value })"
+        /></label>
         @if (tab() === 'episodes') {
-          <label>Episódio a partir de<input type="number" min="0" inputmode="numeric" class="field"
-            [value]="filters().epMin ?? ''" (input)="setNumber('epMin', $any($event.target).value)" /></label>
-          <label>Episódio até<input type="number" min="0" inputmode="numeric" class="field"
-            [value]="filters().epMax ?? ''" (input)="setNumber('epMax', $any($event.target).value)" /></label>
+          <label
+            >Episódio a partir de<input
+              type="number"
+              min="0"
+              inputmode="numeric"
+              class="field"
+              [value]="filters().epMin ?? ''"
+              (input)="setNumber('epMin', $any($event.target).value)"
+          /></label>
+          <label
+            >Episódio até<input
+              type="number"
+              min="0"
+              inputmode="numeric"
+              class="field"
+              [value]="filters().epMax ?? ''"
+              (input)="setNumber('epMax', $any($event.target).value)"
+          /></label>
         } @else {
-          <label class="col-span-2">Ordenar por
+          <label class="col-span-2"
+            >Ordenar por
             <select class="field" [value]="sort()" (change)="sort.set($any($event.target).value)">
               <option value="recent">Assistido recentemente</option>
               <option value="oldest">Assistido há mais tempo</option>
@@ -116,63 +227,125 @@
           </label>
         }
       </div>
-      <label class="block text-xs text-zinc-400">Carregar até (episódios do histórico)
+      <label class="block text-xs text-zinc-400"
+        >Sem assistir há mais de
+        <select class="field" (change)="setStale($any($event.target).value)">
+          <option value="" [selected]="filters().olderThanMonths === null">Qualquer tempo</option>
+          @for (m of staleOptions; track m) {
+            <option [value]="m" [selected]="filters().olderThanMonths === m">
+              {{ m === 1 ? '1 mês' : m + ' meses' }}
+            </option>
+          }
+        </select>
+      </label>
+      <label class="block text-xs text-zinc-400"
+        >Carregar até (episódios do histórico)
         <select class="field" (change)="setMaxEpisodes($any($event.target).value)">
           @for (n of limits; track n) {
-            <option [value]="n" [selected]="n === settings.maxEpisodes()">{{ n }}</option>
+            <option [value]="n" [selected]="n === settings.maxEpisodes()">
+              {{ limitLabel(n) }}
+            </option>
           }
         </select>
       </label>
       @if (loaded() && episodes().length >= settings.maxEpisodes()) {
         <p class="text-xs text-amber-400">
-          Limite atingido ({{ episodes().length }}): pode haver mais episódios. Aumente o limite para carregar mais.
+          Limite atingido ({{ episodes().length }}): pode haver mais episódios. Aumente o limite
+          para carregar mais.
         </p>
       }
       @if (hasFilters()) {
-        <button type="button" class="text-xs text-orange-400 underline" (click)="clearFilters()">Limpar filtros</button>
+        <button type="button" class="text-xs text-orange-400 underline" (click)="clearFilters()">
+          Limpar filtros
+        </button>
       }
     </section>
 
-    @if (loading()) {
+    @if (loading() && episodes().length === 0) {
       <p class="py-10 text-center text-zinc-400">Carregando histórico…</p>
     } @else if (tab() === 'series') {
+      @if (loading()) {
+        <p class="mb-2 text-center text-xs text-zinc-500">
+          Atualizando… (remoção liberada em instantes)
+        </p>
+      }
       @if (visibleSeries().length === 0) {
-        <p class="py-10 text-center text-zinc-400">{{ loaded() ? 'Nenhuma série encontrada.' : '' }}</p>
+        <p class="py-10 text-center text-zinc-400">
+          {{ loaded() ? 'Nenhuma série encontrada.' : '' }}
+        </p>
       } @else {
         <div class="mb-2 flex items-center justify-between text-xs text-zinc-400">
           <span>
-            {{ visibleSeries().length }} série(s)@if (selectMode()) { · {{ selectedSeries().size }} selecionada(s) }
+            {{ visibleSeries().length }} série(s)
+            @if (selectMode()) {
+              · {{ selectedSeries().size }} selecionada(s)
+            }
           </span>
           @if (selectMode()) {
-            <button type="button" class="text-orange-400 underline" (click)="toggleSelectMode()">Cancelar seleção</button>
+            <button type="button" class="text-orange-400 underline" (click)="toggleSelectMode()">
+              Cancelar seleção
+            </button>
           } @else {
-            <button type="button" class="text-orange-400 underline" (click)="toggleSelectMode()">Selecionar várias</button>
+            <button type="button" class="text-orange-400 underline" (click)="toggleSelectMode()">
+              Selecionar várias
+            </button>
           }
         </div>
         <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           @for (s of visibleSeries(); track s.seriesId) {
-            <li class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
-              [class.ring-2]="selectedSeries().has(s.seriesId)" [class.ring-orange-500]="selectedSeries().has(s.seriesId)">
-              <div class="relative aspect-video bg-zinc-800" (click)="selectMode() && toggleSeries(s.seriesId)">
+            <li
+              class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
+              [class.ring-2]="selectedSeries().has(s.seriesId)"
+              [class.ring-orange-500]="selectedSeries().has(s.seriesId)"
+            >
+              <div
+                class="relative aspect-video bg-zinc-800"
+                (click)="selectMode() && toggleSeries(s.seriesId)"
+              >
                 @if (s.coverUrl) {
-                  <img [src]="s.coverUrl" [alt]="s.title" loading="lazy" class="h-full w-full object-cover" />
+                  <img
+                    [src]="s.coverUrl"
+                    [alt]="s.title"
+                    loading="lazy"
+                    class="h-full w-full object-cover"
+                  />
                 }
                 @if (selectMode()) {
-                  <label class="absolute left-2 top-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-black/60">
-                    <input type="checkbox" class="h-5 w-5 accent-orange-600" [attr.aria-label]="'Selecionar ' + s.title"
-                      [checked]="selectedSeries().has(s.seriesId)" (change)="toggleSeries(s.seriesId)" (click)="$event.stopPropagation()" />
+                  <label
+                    class="absolute left-2 top-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-black/60"
+                  >
+                    <input
+                      type="checkbox"
+                      class="h-5 w-5 accent-orange-600"
+                      [attr.aria-label]="'Selecionar ' + s.title"
+                      [checked]="selectedSeries().has(s.seriesId)"
+                      (change)="toggleSeries(s.seriesId)"
+                      (click)="$event.stopPropagation()"
+                    />
                   </label>
                 }
               </div>
               <div class="space-y-2 p-3">
                 <h2 class="line-clamp-2 text-sm font-semibold leading-tight">{{ s.title }}</h2>
                 <p class="text-xs text-zinc-400">
-                  {{ s.episodeCount }} episódio(s)@if (s.lastWatchedAt) { · {{ s.lastWatchedAt | date: 'dd/MM/yyyy' }} }
+                  {{ s.episodeCount }} episódio(s)
+                  @if (s.lastWatchedAt) {
+                    · {{ s.lastWatchedAt | date: 'dd/MM/yyyy' }}
+                  }
                 </p>
                 @if (!selectMode()) {
                   <div class="grid grid-cols-2 gap-2">
-                    <button type="button" class="btn" (click)="showSeriesEpisodes(s.title)">Episódios</button>
-                    <button type="button" class="btn-danger" [disabled]="scanning()" (click)="startSeriesRemoval([s.seriesId])">Remover</button>
+                    <button type="button" class="btn" (click)="showSeriesEpisodes(s.title)">
+                      Episódios
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-danger"
+                      [disabled]="scanning() || loading()"
+                      (click)="startSeriesRemoval([s.seriesId])"
+                    >
+                      Remover
+                    </button>
                   </div>
                 }
               </div>
@@ -181,37 +354,64 @@
         </ul>
       }
     } @else {
+      @if (loading()) {
+        <p class="mb-2 text-center text-xs text-zinc-500">
+          Atualizando… (remoção liberada em instantes)
+        </p>
+      }
       @if (visibleEpisodes().length === 0) {
-        <p class="py-10 text-center text-zinc-400">{{ loaded() ? 'Nenhum episódio encontrado.' : '' }}</p>
+        <p class="py-10 text-center text-zinc-400">
+          {{ loaded() ? 'Nenhum episódio encontrado.' : '' }}
+        </p>
       } @else {
         <div class="mb-2 flex items-center justify-between text-xs text-zinc-400">
           <span>{{ visibleEpisodes().length }} episódio(s)</span>
           <span class="flex gap-3">
-            <button type="button" class="text-orange-400 underline" (click)="selectAllVisible()">Selecionar todos</button>
+            <button type="button" class="text-orange-400 underline" (click)="selectAllVisible()">
+              Selecionar todos
+            </button>
             @if (selected().size) {
-              <button type="button" class="text-orange-400 underline" (click)="clearSelection()">Limpar seleção</button>
+              <button type="button" class="text-orange-400 underline" (click)="clearSelection()">
+                Limpar seleção
+              </button>
             }
           </span>
         </div>
         <ul class="space-y-2">
           @for (e of shownEpisodes(); track e.episodeId) {
             <li>
-              <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2"
-                [class.border-orange-600]="selected().has(e.episodeId)">
-                <input type="checkbox" class="h-5 w-5 shrink-0 accent-orange-600"
-                  [checked]="selected().has(e.episodeId)" (change)="toggle(e.episodeId)" />
+              <label
+                class="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2"
+                [class.border-orange-600]="selected().has(e.episodeId)"
+              >
+                <input
+                  type="checkbox"
+                  class="h-5 w-5 shrink-0 accent-orange-600"
+                  [checked]="selected().has(e.episodeId)"
+                  (change)="toggle(e.episodeId)"
+                />
                 <div class="h-12 w-20 shrink-0 overflow-hidden rounded bg-zinc-800">
                   @if (e.coverUrl) {
-                    <img [src]="e.coverUrl" alt="" loading="lazy" class="h-full w-full object-cover" />
+                    <img
+                      [src]="e.coverUrl"
+                      alt=""
+                      loading="lazy"
+                      class="h-full w-full object-cover"
+                    />
                   }
                 </div>
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm font-medium">{{ e.seriesTitle }}</p>
                   <p class="truncate text-xs text-zinc-400">
-                    @if (e.episodeNumber !== null) { Ep. {{ e.episodeNumber }} · }{{ e.episodeTitle }}
+                    @if (e.episodeNumber !== null) {
+                      Ep. {{ e.episodeNumber }} ·
+                    }
+                    {{ e.episodeTitle }}
                   </p>
                   @if (e.watchedAt) {
-                    <p class="text-[11px] text-zinc-500">{{ e.watchedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
+                    <p class="text-[11px] text-zinc-500">
+                      {{ e.watchedAt | date: 'dd/MM/yyyy HH:mm' }}
+                    </p>
                   }
                 </div>
               </label>
@@ -219,27 +419,45 @@
           }
         </ul>
         @if (visibleEpisodes().length > shownEpisodes().length) {
-          <button type="button" class="btn mt-3 w-full" (click)="limit.set(limit() + 100)">Mostrar mais</button>
+          <button type="button" class="btn mt-3 w-full" (click)="limit.set(limit() + 100)">
+            Mostrar mais
+          </button>
         }
       }
     }
 
     <footer class="mt-8 text-center">
-      <button type="button" class="text-xs text-zinc-500 underline" (click)="logout()">Sair da conta</button>
+      <button type="button" class="text-xs text-zinc-500 underline" (click)="logout()">
+        Sair da conta
+      </button>
     </footer>
   }
 </main>
 
 @if (!pending() && !scanning()) {
   @if (tab() === 'episodes' && selected().size > 0) {
-    <div class="fixed inset-x-0 bottom-0 z-10 border-t border-zinc-800 bg-zinc-900/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <button type="button" class="btn-danger mx-auto block w-full max-w-md py-3" (click)="removeSelected()">
+    <div
+      class="fixed inset-x-0 bottom-0 z-10 border-t border-zinc-800 bg-zinc-900/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
+      <button
+        type="button"
+        class="btn-danger mx-auto block w-full max-w-md py-3"
+        [disabled]="loading()"
+        (click)="removeSelected()"
+      >
         Remover {{ selected().size }} episódio(s) selecionado(s)
       </button>
     </div>
   } @else if (tab() === 'series' && selectedSeries().size > 0) {
-    <div class="fixed inset-x-0 bottom-0 z-10 border-t border-zinc-800 bg-zinc-900/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <button type="button" class="btn-danger mx-auto block w-full max-w-md py-3" (click)="removeSelectedSeries()">
+    <div
+      class="fixed inset-x-0 bottom-0 z-10 border-t border-zinc-800 bg-zinc-900/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
+      <button
+        type="button"
+        class="btn-danger mx-auto block w-full max-w-md py-3"
+        [disabled]="loading()"
+        (click)="removeSelectedSeries()"
+      >
         Remover {{ selectedSeries().size }} série(s) selecionada(s)
       </button>
     </div>
@@ -250,30 +468,61 @@
   <div class="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4" role="status">
     <div class="w-full max-w-sm space-y-2 rounded-2xl bg-zinc-900 p-5 text-center">
       <p class="text-sm font-medium">Conferindo o histórico completo…</p>
-      <p class="text-xs text-zinc-400">Para remover todos os episódios das séries, inclusive os fora da lista carregada.</p>
+      <p class="text-xs text-zinc-400">
+        Para remover todos os episódios das séries, inclusive os fora da lista carregada.
+      </p>
     </div>
   </div>
 }
 
 @if (pending()) {
-  <div class="fixed inset-0 z-20 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true">
+  <div
+    class="fixed inset-0 z-20 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+    role="dialog"
+    aria-modal="true"
+  >
     <div class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5">
       <h2 class="text-lg font-semibold">Remover do histórico?</h2>
       <p class="text-sm text-zinc-300">{{ pendingText() }} Esta ação não pode ser desfeita.</p>
 
       @if (removeProgress(); as prog) {
-        <div class="h-2 overflow-hidden rounded-full bg-zinc-800" role="progressbar" [attr.aria-valuenow]="prog.done" [attr.aria-valuemax]="prog.total">
-          <div class="h-full bg-red-500 transition-all" [style.width.%]="prog.total ? (prog.done * 100) / prog.total : 0"></div>
+        <div
+          class="h-2 overflow-hidden rounded-full bg-zinc-800"
+          role="progressbar"
+          [attr.aria-valuenow]="prog.done"
+          [attr.aria-valuemax]="prog.total"
+        >
+          <div
+            class="h-full bg-red-500 transition-all"
+            [style.width.%]="prog.total ? (prog.done * 100) / prog.total : 0"
+          ></div>
         </div>
         <p class="text-xs text-zinc-400">
-          {{ cancelRequested() ? 'Cancelando após o lote atual…' : 'Removendo ' + prog.done + ' de ' + prog.total + '…' }}
+          {{
+            cancelRequested()
+              ? 'Cancelando após o lote atual…'
+              : 'Removendo ' + prog.done + ' de ' + prog.total + '…'
+          }}
         </p>
         <div class="flex justify-end">
-          <button type="button" class="btn" [disabled]="cancelRequested()" (click)="cancelRemoval()">Cancelar remoção</button>
+          <button
+            type="button"
+            class="btn"
+            [disabled]="cancelRequested()"
+            (click)="cancelRemoval()"
+          >
+            Cancelar remoção
+          </button>
         </div>
       } @else {
         <button type="button" class="btn w-full" [disabled]="backupBusy()" (click)="saveBackup()">
-          {{ backupBusy() ? 'Gerando cópia…' : backedUp() ? 'Cópia enviada ✓ (salvar de novo)' : 'Salvar cópia antes (CSV)' }}
+          {{
+            backupBusy()
+              ? 'Gerando cópia…'
+              : backedUp()
+                ? 'Cópia enviada ✓ (salvar de novo)'
+                : 'Salvar cópia antes (CSV)'
+          }}
         </button>
         <div class="flex justify-end gap-2">
           <button type="button" class="btn" (click)="closePending()">Cancelar</button>
@@ -285,15 +534,23 @@
 }
 
 @if (update.available(); as build) {
-  <div class="fixed inset-0 z-30 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true">
+  <div
+    class="fixed inset-0 z-30 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+    role="dialog"
+    aria-modal="true"
+  >
     <div class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5">
       <h2 class="text-lg font-semibold">Nova versão disponível</h2>
       <p class="text-sm text-zinc-300">
-        O build #{{ build }} está disponível (você tem o #{{ update.currentBuild }}). O app baixa a atualização e abre a
-        confirmação de instalação do Android. Seu login continua.
+        O build #{{ build }} está disponível (você tem o #{{ update.currentBuild }}). O app baixa a
+        atualização e abre a confirmação de instalação do Android. Seu login continua.
       </p>
       @if (update.progress(); as pct) {
-        <div class="h-2 overflow-hidden rounded-full bg-zinc-800" role="progressbar" [attr.aria-valuenow]="pct">
+        <div
+          class="h-2 overflow-hidden rounded-full bg-zinc-800"
+          role="progressbar"
+          [attr.aria-valuenow]="pct"
+        >
           <div class="h-full bg-orange-500 transition-all" [style.width.%]="pct"></div>
         </div>
         <p class="text-xs text-zinc-400">Baixando… {{ pct }}%</p>
@@ -302,13 +559,29 @@
       }
       @if (update.downloadError(); as err) {
         <p role="alert" class="text-sm text-amber-300">{{ err }}</p>
-        <button type="button" class="text-xs text-orange-400 underline" (click)="update.downloadInBrowser()">
+        <button
+          type="button"
+          class="text-xs text-orange-400 underline"
+          (click)="update.downloadInBrowser()"
+        >
           Baixar pelo navegador
         </button>
       }
       <div class="flex justify-end gap-2">
-        <button type="button" class="btn" [disabled]="update.progress() !== null" (click)="update.dismiss()">Depois</button>
-        <button type="button" class="btn-primary" [disabled]="update.progress() !== null" (click)="update.download()">
+        <button
+          type="button"
+          class="btn"
+          [disabled]="update.progress() !== null"
+          (click)="update.dismiss()"
+        >
+          Depois
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          [disabled]="update.progress() !== null"
+          (click)="update.download()"
+        >
           Atualizar
         </button>
       </div>

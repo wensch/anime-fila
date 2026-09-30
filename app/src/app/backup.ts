@@ -10,7 +10,14 @@ function cell(v: string | number | null): string {
 
 /** CSV com BOM (abre com acentos certos no Excel/Planilhas). */
 export function buildCsv(episodes: Episode[]): string {
-  const header = ['Série', 'Episódio', 'Título do episódio', 'Assistido em', 'ID do episódio', 'ID da série'];
+  const header = [
+    'Série',
+    'Episódio',
+    'Título do episódio',
+    'Assistido em',
+    'ID do episódio',
+    'ID da série',
+  ];
   const rows = episodes.map((e) => [
     e.seriesTitle,
     e.episodeNumber,

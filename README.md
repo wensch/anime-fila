@@ -4,6 +4,8 @@ App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem c
 
 - **Séries:** histórico agrupado por série (como no iOS), com remoção da série inteira num toque.
 - **Remoção em massa:** marque várias séries e remova de uma vez; o app confere o histórico completo antes (inclusive episódios além do limite "Carregar até"), oferece **salvar uma cópia em CSV** antes de apagar, mostra o progresso e permite cancelar.
+- **Filtros:** texto, datas, ordenação e "sem assistir há mais de N meses" para achar o que está abandonado; "Carregar até" vai de 100 a Tudo (5000).
+- **Abertura rápida:** mostra a última lista guardada na hora e atualiza por trás.
 - **Episódios:** lista completa, filtro por texto, intervalo de datas e número do episódio; seleção múltipla para remover episódios avulsos.
 - **Login na página oficial:** o app abre o site da Crunchyroll num WebView; você digita e-mail e senha lá (o app nunca os vê) e a sessão é renovada pelo cookie do site.
 - **Sem servidor:** todas as chamadas saem de dentro desse WebView (plugin Android `PageFetch`, em `app/android/.../PageFetchPlugin.java`), com o IP do seu celular. Isso é necessário porque o Cloudflare da Crunchyroll barra clientes HTTP comuns (erro 403 "Just a moment...").
@@ -35,7 +37,8 @@ Se falhar: toque em **Diagnóstico** no app. Ele lista cada chamada (método, ca
 ```bash
 cd app
 npm ci --legacy-peer-deps
-npm test                 # lógica de agrupamento e filtros (vitest)
+npm test                 # agrupamento, filtros, backup e cliente da API (vitest)
+npm run format:check     # Prettier (também roda no CI)
 npx ng build && npx cap sync android
 ```
 

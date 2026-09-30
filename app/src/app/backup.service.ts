@@ -18,7 +18,11 @@ export class BackupService {
         directory: Directory.Cache,
         encoding: Encoding.UTF8,
       });
-      await Share.share({ title: 'Cópia do histórico', dialogTitle: 'Salvar cópia do histórico', files: [file.uri] });
+      await Share.share({
+        title: 'Cópia do histórico',
+        dialogTitle: 'Salvar cópia do histórico',
+        files: [file.uri],
+      });
     } else {
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const a = document.createElement('a');

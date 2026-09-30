@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { Episode } from './models';
 import { ApiConfig, DEFAULT_CONFIG, DEFAULT_MAX_EPISODES, EPISODE_LIMITS } from './endpoints';
 
 export interface Session {
@@ -10,6 +11,7 @@ export interface Session {
 
 const KEY = 'crunchysync.v2';
 const KEY_COVERS = 'crunchysync.covers';
+const KEY_HISTORY = 'crunchysync.history';
 
 interface Stored {
   session: Session | null;
@@ -26,7 +28,9 @@ function load(): Stored {
         session: parsed.session ?? null,
         config: { ...DEFAULT_CONFIG, ...parsed.config },
         deviceId: parsed.deviceId || crypto.randomUUID(),
-        maxEpisodes: EPISODE_LIMITS.includes(parsed.maxEpisodes) ? parsed.maxEpisodes : DEFAULT_MAX_EPISODES,
+        maxEpisodes: EPISODE_LIMITS.includes(parsed.maxEpisodes)
+          ? parsed.maxEpisodes
+          : DEFAULT_MAX_EPISODES,
       };
     }
   } catch {
@@ -77,6 +81,32 @@ export class SettingsService {
       localStorage.setItem(KEY_COVERS, JSON.stringify(covers));
     } catch {
       /* sem armazenamento: refaz na próxima abertura */
+    }
+  }
+
+  /** Última lista de episódios carregada: mostrada na hora ao abrir, enquanto atualiza. */
+  loadHistoryCache(): Episode[] {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY_HISTORY) ?? '[]');
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveHistoryCache(episodes: Episode[]): void {
+    try {
+      localStorage.setItem(KEY_HISTORY, JSON.stringify(episodes));
+    } catch {
+      /* sem espaço/armazenamento: abre sem cache */
+    }
+  }
+
+  clearHistoryCache(): void {
+    try {
+      localStorage.removeItem(KEY_HISTORY);
+    } catch {
+      /* ignora */
     }
   }
 
