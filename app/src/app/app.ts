@@ -3,6 +3,9 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { BackupService } from './backup.service';
+import { CoverCacheService } from './cover-cache.service';
+import { keyOf } from './cover-cache';
+import { plural } from './text';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
 import { ApiConfig, EPISODE_LIMITS, FULL_SCAN_LIMIT, limitLabel } from './endpoints';
@@ -40,6 +43,8 @@ const PAGE = 100;
 export class App {
   private readonly cr = inject(CrunchyrollService);
   private readonly backup = inject(BackupService);
+  private readonly coverCache = inject(CoverCacheService);
+  protected readonly plural = plural;
   protected readonly settings = inject(SettingsService);
   protected readonly diag = inject(DiagnosticsService);
   protected readonly update = inject(UpdateService);
@@ -157,6 +162,7 @@ export class App {
       if (document.visibilityState === 'visible') void this.update.checkIfDue();
     });
     if (this.loggedIn()) {
+      void this.coverCache.init();
       // Mostra na hora a última lista guardada e atualiza por trás.
       const cached = this.settings.loadHistoryCache();
       if (cached.length > 0) {
@@ -230,16 +236,28 @@ export class App {
     const missing = this.allSeries()
       .map((s) => s.seriesId)
       .filter((id) => !known[id]);
-    if (missing.length === 0) return;
-    try {
-      const found = await this.cr.getSeriesCovers(missing);
-      if (Object.keys(found).length === 0) return;
-      const merged = { ...this.covers(), ...found };
-      this.covers.set(merged);
-      this.settings.saveCovers(merged);
-    } catch (e) {
-      this.handleError(e);
+    if (missing.length > 0) {
+      try {
+        const found = await this.cr.getSeriesCovers(missing);
+        if (Object.keys(found).length > 0) {
+          const merged = { ...this.covers(), ...found };
+          this.covers.set(merged);
+          this.settings.saveCovers(merged);
+        }
+      } catch (e) {
+        this.handleError(e);
+      }
     }
+    // Guarda as capas no aparelho: na próxima vez abrem na hora e sem baixar de novo.
+    const urls: Record<string, string> = {};
+    for (const s of this.allSeries()) if (s.coverUrl) urls[s.seriesId] = s.coverUrl;
+    void this.coverCache.sync(urls);
+  }
+
+  /** Endereço da capa: o arquivo salvo no aparelho, ou o remoto se ainda não foi baixado. */
+  protected coverSrc(s: { seriesId: string; coverUrl: string | null }): string | null {
+    if (!this.coverCache.ready()) return null;
+    return this.coverCache.local()[keyOf(s.seriesId)] ?? s.coverUrl;
   }
 
   /** Confere o histórico COMPLETO e monta a lista exata de episódios das séries a remover. */

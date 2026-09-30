@@ -1,6 +1,10 @@
 @import 'tailwindcss';
 
 @layer base {
+  /* Campos de data, listas e barras de rolagem nativos no tema escuro. */
+  :root {
+    color-scheme: dark;
+  }
   /* Foco visível para quem usa teclado/controle. */
   :focus-visible {
     outline: 2px solid var(--color-orange-400);
@@ -30,7 +34,7 @@
     @apply inline-flex min-h-12 items-center justify-center rounded-xl border border-red-800 bg-red-950 px-4 text-sm font-medium text-red-100 hover:bg-red-900 disabled:opacity-50;
   }
   .tab {
-    @apply min-h-12 rounded-xl bg-zinc-900 px-3 text-sm font-medium text-zinc-300;
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-3 text-sm font-medium text-zinc-300;
   }
   .tab-on {
     @apply bg-orange-700 text-white;
@@ -40,6 +44,9 @@
   }
   .link {
     @apply inline-flex min-h-12 items-center px-2 text-sm text-orange-400 underline;
+  }
+  .chip-limit {
+    @apply inline-flex min-h-12 items-center px-1 text-xs text-amber-400 underline;
   }
   .menu-item {
     @apply flex min-h-12 w-full items-center rounded-lg px-3 text-left text-sm text-zinc-100 hover:bg-zinc-800;

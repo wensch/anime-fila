@@ -197,6 +197,21 @@
           [attr.aria-current]="tab() === 'series' ? 'page' : null"
           (click)="setTab('series')"
         >
+          <svg
+            viewBox="0 0 24 24"
+            class="h-5 w-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </svg>
           Séries ({{ allSeries().length }})
         </button>
         <button
@@ -206,6 +221,18 @@
           [attr.aria-current]="tab() === 'episodes' ? 'page' : null"
           (click)="setTab('episodes')"
         >
+          <svg
+            viewBox="0 0 24 24"
+            class="h-5 w-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+          </svg>
           Episódios ({{ episodes().length }})
         </button>
       </nav>
@@ -225,6 +252,21 @@
           [attr.aria-expanded]="filtersOpen()"
           (click)="filtersOpen.set(!filtersOpen())"
         >
+          <svg
+            viewBox="0 0 24 24"
+            class="h-5 w-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1" />
+            <circle cx="16" cy="6" r="2.2" />
+            <circle cx="10" cy="12" r="2.2" />
+            <circle cx="18" cy="18" r="2.2" />
+          </svg>
           Filtros
           @if (activeFilterCount() > 0) {
             <span class="rounded-full bg-orange-700 px-2 py-0.5 text-xs text-white">{{
@@ -367,196 +409,268 @@
           }
         </ul>
       }
-    } @else if (tab() === 'series') {
-      @if (loading()) {
-        <p class="mb-2 text-center text-xs text-zinc-400">
-          Atualizando… (remoção liberada em instantes)
-        </p>
-      }
-      @if (limitReached()) {
-        <button
-          type="button"
-          class="flex min-h-12 w-full items-center text-left text-sm text-amber-400"
-          (click)="filtersOpen.set(true)"
-        >
-          Limite de {{ settings.maxEpisodes() }} episódios atingido: pode haver mais. Toque para
-          ajustar.
-        </button>
-      }
-      @if (visibleSeries().length === 0) {
-        <p class="py-10 text-center text-zinc-400">
-          {{ loaded() ? 'Nenhuma série encontrada.' : '' }}
-        </p>
-      } @else {
-        <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
-          <span>
-            {{ visibleSeries().length }} série(s)
-            @if (selectMode()) {
-              · {{ selectedSeries().size }} selecionada(s)
-            }
-          </span>
-          @if (selectMode()) {
-            <button type="button" class="link -mr-2" (click)="toggleSelectMode()">
-              Cancelar seleção
-            </button>
-          } @else {
-            <button type="button" class="link -mr-2" (click)="toggleSelectMode()">
-              Selecionar várias
-            </button>
-          }
-        </div>
-        <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          @for (s of visibleSeries(); track s.seriesId) {
-            <li
-              class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
-              [class.ring-2]="selectedSeries().has(s.seriesId)"
-              [class.ring-orange-500]="selectedSeries().has(s.seriesId)"
-            >
-              <div
-                class="relative aspect-video bg-zinc-800"
-                (click)="selectMode() && toggleSeries(s.seriesId)"
-              >
-                @if (s.coverUrl) {
-                  <img
-                    [src]="s.coverUrl"
-                    [alt]="s.title"
-                    loading="lazy"
-                    class="h-full w-full object-cover"
-                  />
-                } @else {
-                  <div
-                    class="flex h-full w-full items-center justify-center text-4xl font-bold text-zinc-600"
-                    aria-hidden="true"
-                  >
-                    {{ s.title.charAt(0).toUpperCase() }}
-                  </div>
-                }
-                @if (selectMode()) {
-                  <label
-                    class="absolute left-1 top-1 flex h-12 w-12 cursor-pointer items-center justify-center"
-                  >
-                    <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60">
-                      <input
-                        type="checkbox"
-                        class="h-5 w-5 accent-orange-600"
-                        [attr.aria-label]="'Selecionar ' + s.title"
-                        [checked]="selectedSeries().has(s.seriesId)"
-                        (change)="toggleSeries(s.seriesId)"
-                        (click)="$event.stopPropagation()"
-                      />
-                    </span>
-                  </label>
-                }
-              </div>
-              <div class="space-y-2 p-3">
-                <h2 class="line-clamp-2 text-sm font-semibold leading-tight">{{ s.title }}</h2>
-                <p class="text-xs text-zinc-400">
-                  {{ s.episodeCount }} episódio(s)
-                  @if (s.lastWatchedAt) {
-                    · {{ s.lastWatchedAt | date: 'dd/MM/yyyy' }}
-                  }
-                </p>
-                @if (!selectMode()) {
-                  <div class="grid grid-cols-2 gap-3">
-                    <button type="button" class="btn px-2" (click)="showSeriesEpisodes(s.title)">
-                      Episódios
-                    </button>
-                    <button
-                      type="button"
-                      class="btn-danger px-2"
-                      [disabled]="scanning() || loading()"
-                      (click)="startSeriesRemoval([s.seriesId])"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                }
-              </div>
-            </li>
-          }
-        </ul>
-      }
     } @else {
-      @if (loading()) {
-        <p class="mb-2 text-center text-xs text-zinc-400">
-          Atualizando… (remoção liberada em instantes)
-        </p>
-      }
-      @if (limitReached()) {
-        <button
-          type="button"
-          class="flex min-h-12 w-full items-center text-left text-sm text-amber-400"
-          (click)="filtersOpen.set(true)"
-        >
-          Limite de {{ settings.maxEpisodes() }} episódios atingido: pode haver mais. Toque para
-          ajustar.
-        </button>
-      }
-      @if (visibleEpisodes().length === 0) {
-        <p class="py-10 text-center text-zinc-400">
-          {{ loaded() ? 'Nenhum episódio encontrado.' : '' }}
-        </p>
-      } @else {
-        <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
-          <span>{{ visibleEpisodes().length }} episódio(s)</span>
-          <span class="flex gap-1">
-            <button type="button" class="link" (click)="selectAllVisible()">
-              Selecionar todos
-            </button>
-            @if (selected().size) {
-              <button type="button" class="link -mr-2" (click)="clearSelection()">
-                Limpar seleção
+      <div [hidden]="tab() !== 'series'">
+        @if (loading()) {
+          <p class="mb-2 text-center text-xs text-zinc-400">
+            Atualizando… (remoção liberada em instantes)
+          </p>
+        }
+        @if (visibleSeries().length === 0) {
+          <p class="py-10 text-center text-zinc-400">
+            {{ loaded() ? 'Nenhuma série encontrada.' : '' }}
+          </p>
+        } @else {
+          <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
+            <span class="flex min-w-0 flex-wrap items-center gap-x-2">
+              <span>
+                {{ plural(visibleSeries().length, 'série', 'séries') }}
+                @if (selectMode()) {
+                  · {{ plural(selectedSeries().size, 'selecionada', 'selecionadas') }}
+                }
+              </span>
+              @if (limitReached()) {
+                <button
+                  type="button"
+                  class="chip-limit"
+                  [attr.aria-label]="
+                    'Limite de ' +
+                    settings.maxEpisodes() +
+                    ' episódios atingido; toque para ajustar'
+                  "
+                  (click)="filtersOpen.set(true)"
+                >
+                  limite de {{ settings.maxEpisodes() }}
+                </button>
+              }
+            </span>
+            @if (selectMode()) {
+              <button type="button" class="link -mr-2 gap-1" (click)="toggleSelectMode()">
+                <svg
+                  viewBox="0 0 24 24"
+                  class="h-5 w-5 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+                Cancelar seleção
+              </button>
+            } @else {
+              <button type="button" class="link -mr-2 gap-1" (click)="toggleSelectMode()">
+                <svg
+                  viewBox="0 0 24 24"
+                  class="h-5 w-5 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M9 11l3 3 8-8" />
+                  <path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9" />
+                </svg>
+                Selecionar várias
               </button>
             }
-          </span>
-        </div>
-        <ul class="space-y-2">
-          @for (e of shownEpisodes(); track e.episodeId) {
-            <li>
-              <label
-                class="flex min-h-[4.5rem] cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2"
-                [class.border-orange-600]="selected().has(e.episodeId)"
+          </div>
+          <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            @for (s of visibleSeries(); track s.seriesId) {
+              <li
+                class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
+                [class.ring-2]="selectedSeries().has(s.seriesId)"
+                [class.ring-orange-500]="selectedSeries().has(s.seriesId)"
               >
-                <input
-                  type="checkbox"
-                  class="h-6 w-6 shrink-0 accent-orange-600"
-                  [checked]="selected().has(e.episodeId)"
-                  (change)="toggle(e.episodeId)"
-                />
-                <div class="h-12 w-20 shrink-0 overflow-hidden rounded bg-zinc-800">
-                  @if (e.coverUrl) {
+                <div
+                  class="relative aspect-video bg-zinc-800"
+                  (click)="selectMode() && toggleSeries(s.seriesId)"
+                >
+                  @if (coverSrc(s); as src) {
                     <img
-                      [src]="e.coverUrl"
-                      alt=""
+                      [src]="src"
+                      [alt]="s.title"
                       loading="lazy"
+                      decoding="async"
                       class="h-full w-full object-cover"
                     />
+                  } @else {
+                    <div
+                      class="flex h-full w-full items-center justify-center text-4xl font-bold text-zinc-600"
+                      aria-hidden="true"
+                    >
+                      {{ s.title.charAt(0).toUpperCase() }}
+                    </div>
+                  }
+                  @if (selectMode()) {
+                    <label
+                      class="absolute left-1 top-1 flex h-12 w-12 cursor-pointer items-center justify-center"
+                    >
+                      <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60">
+                        <input
+                          type="checkbox"
+                          class="h-5 w-5 accent-orange-600"
+                          [attr.aria-label]="'Selecionar ' + s.title"
+                          [checked]="selectedSeries().has(s.seriesId)"
+                          (change)="toggleSeries(s.seriesId)"
+                          (click)="$event.stopPropagation()"
+                        />
+                      </span>
+                    </label>
                   }
                 </div>
-                <div class="min-w-0 flex-1">
-                  <p class="truncate text-sm font-medium">{{ e.seriesTitle }}</p>
-                  <p class="truncate text-xs text-zinc-400">
-                    @if (e.episodeNumber !== null) {
-                      Ep. {{ e.episodeNumber }} ·
+                <div class="space-y-2 p-3">
+                  <h2 class="line-clamp-2 text-sm font-semibold leading-tight">{{ s.title }}</h2>
+                  <p class="text-xs text-zinc-400">
+                    {{ plural(s.episodeCount, 'episódio', 'episódios') }}
+                    @if (s.lastWatchedAt) {
+                      · {{ s.lastWatchedAt | date: 'dd/MM/yyyy' }}
                     }
-                    {{ e.episodeTitle }}
                   </p>
-                  @if (e.watchedAt) {
-                    <p class="text-xs text-zinc-400">
-                      {{ e.watchedAt | date: 'dd/MM/yyyy HH:mm' }}
-                    </p>
+                  @if (!selectMode()) {
+                    <div class="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        class="btn px-2"
+                        [attr.aria-label]="'Ver episódios de ' + s.title"
+                        title="Ver episódios"
+                        (click)="showSeriesEpisodes(s.title)"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          class="h-6 w-6"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h13M3 12h7M3 18h7" />
+                          <path d="M14 13.5l7 4-7 4z" fill="currentColor" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-danger px-2"
+                        [attr.aria-label]="'Remover ' + s.title + ' do histórico'"
+                        title="Remover do histórico"
+                        [disabled]="scanning() || loading()"
+                        (click)="startSeriesRemoval([s.seriesId])"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          class="h-6 w-6"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6" />
+                        </svg>
+                      </button>
+                    </div>
                   }
                 </div>
-              </label>
-            </li>
-          }
-        </ul>
-        @if (visibleEpisodes().length > shownEpisodes().length) {
-          <button type="button" class="btn mt-3 w-full" (click)="limit.set(limit() + 100)">
-            Mostrar mais
-          </button>
+              </li>
+            }
+          </ul>
         }
-      }
+      </div>
+      <div [hidden]="tab() !== 'episodes'">
+        @if (loading()) {
+          <p class="mb-2 text-center text-xs text-zinc-400">
+            Atualizando… (remoção liberada em instantes)
+          </p>
+        }
+        @if (visibleEpisodes().length === 0) {
+          <p class="py-10 text-center text-zinc-400">
+            {{ loaded() ? 'Nenhum episódio encontrado.' : '' }}
+          </p>
+        } @else {
+          <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
+            <span class="flex min-w-0 flex-wrap items-center gap-x-2">
+              <span>{{ plural(visibleEpisodes().length, 'episódio', 'episódios') }}</span>
+              @if (limitReached()) {
+                <button
+                  type="button"
+                  class="chip-limit"
+                  [attr.aria-label]="
+                    'Limite de ' +
+                    settings.maxEpisodes() +
+                    ' episódios atingido; toque para ajustar'
+                  "
+                  (click)="filtersOpen.set(true)"
+                >
+                  limite de {{ settings.maxEpisodes() }}
+                </button>
+              }
+            </span>
+            <span class="flex gap-1">
+              <button type="button" class="link" (click)="selectAllVisible()">
+                Selecionar todos
+              </button>
+              @if (selected().size) {
+                <button type="button" class="link -mr-2" (click)="clearSelection()">
+                  Limpar seleção
+                </button>
+              }
+            </span>
+          </div>
+          <ul class="space-y-2">
+            @for (e of shownEpisodes(); track e.episodeId) {
+              <li>
+                <label
+                  class="flex min-h-[4.5rem] cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2"
+                  [class.border-orange-600]="selected().has(e.episodeId)"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-6 w-6 shrink-0 accent-orange-600"
+                    [checked]="selected().has(e.episodeId)"
+                    (change)="toggle(e.episodeId)"
+                  />
+                  <div class="h-12 w-20 shrink-0 overflow-hidden rounded bg-zinc-800">
+                    @if (e.coverUrl) {
+                      <img
+                        [src]="e.coverUrl"
+                        alt=""
+                        loading="lazy"
+                        class="h-full w-full object-cover"
+                      />
+                    }
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-medium">{{ e.seriesTitle }}</p>
+                    <p class="truncate text-xs text-zinc-400">
+                      @if (e.episodeNumber !== null) {
+                        Ep. {{ e.episodeNumber }} ·
+                      }
+                      {{ e.episodeTitle }}
+                    </p>
+                    @if (e.watchedAt) {
+                      <p class="text-xs text-zinc-400">
+                        {{ e.watchedAt | date: 'dd/MM/yyyy HH:mm' }}
+                      </p>
+                    }
+                  </div>
+                </label>
+              </li>
+            }
+          </ul>
+          @if (visibleEpisodes().length > shownEpisodes().length) {
+            <button type="button" class="btn mt-3 w-full" (click)="limit.set(limit() + 100)">
+              Mostrar mais
+            </button>
+          }
+        }
+      </div>
     }
   }
 </main>
