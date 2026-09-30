@@ -31,6 +31,8 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
       - run: npm test
+      - name: Embed build number
+        run: echo "export const BUILD_NUMBER = ${{ github.run_number }};" > src/app/build-info.ts
       - run: npx ng build
       - run: npx cap sync android
 

@@ -13,6 +13,7 @@ import {
 } from './history';
 import { Episode, Series } from './models';
 import { SettingsService } from './settings.service';
+import { UpdateService } from './update.service';
 
 type Tab = 'series' | 'episodes';
 type Pending =
@@ -30,6 +31,7 @@ export class App {
   private readonly cr = inject(CrunchyrollService);
   protected readonly settings = inject(SettingsService);
   protected readonly diag = inject(DiagnosticsService);
+  protected readonly update = inject(UpdateService);
 
   protected readonly loggedIn = computed(() => this.settings.session() !== null);
   protected readonly episodes = signal<Episode[]>([]);
@@ -81,6 +83,7 @@ export class App {
   });
 
   constructor() {
+    void this.update.check();
     if (this.loggedIn()) void this.refresh();
   }
 
