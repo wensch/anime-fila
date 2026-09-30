@@ -93,20 +93,26 @@ export class CrunchyrollService {
   async listHistory(): Promise<Episode[]> {
     const accountId = await this.accountId();
     const path = fill(this.settings.config().historyPath, { account: accountId });
-    const episodes: Episode[] = [];
+    const byId = new Map<string, Episode>();
     for (let page = 1; page <= MAX_PAGES; page++) {
       const body: any = await this.authed('GET', path, {
         params: { page: String(page), page_size: String(PAGE_SIZE), locale: this.settings.config().locale },
       });
       const data: any[] = body?.data ?? [];
+      const before = byId.size;
       for (const raw of data) {
         const ep = normalizeHistoryItem(raw);
-        if (ep) episodes.push(ep);
+        if (ep) byId.set(ep.episodeId, ep);
       }
       const total = body?.total;
+      this.diag.log(
+        `histórico p.${page}: ${data.length} itens, ${byId.size - before} novos, total=${total ?? '?'}`,
+      );
       if (data.length === 0 || data.length < PAGE_SIZE) break;
+      if (byId.size === before) break; // a API ignorou o número da página: evita laço
       if (typeof total === 'number' && page * PAGE_SIZE >= total) break;
     }
+    const episodes = [...byId.values()];
     return episodes;
   }
 
