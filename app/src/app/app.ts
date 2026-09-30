@@ -2,7 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { BackupService } from './backup.service';
 import { CoverCacheService } from './cover-cache.service';
 import { keyOf } from './cover-cache';
 import { plural } from './text';
@@ -52,7 +51,6 @@ const PAGE = 100;
 })
 export class App {
   private readonly cr = inject(CrunchyrollService);
-  private readonly backup = inject(BackupService);
   private readonly coverCache = inject(CoverCacheService);
   protected readonly plural = plural;
   protected readonly settings = inject(SettingsService);
@@ -96,8 +94,6 @@ export class App {
   protected readonly cancelRequested = signal(false);
   /** Texto mostrado na remoção entre uma rodada e outra. */
   protected readonly removePhase = signal('Removendo…');
-  protected readonly backupBusy = signal(false);
-  protected readonly backedUp = signal(false);
   /** Verificação do Cloudflare pendente: mostra o botão para concluí-la. */
   protected readonly challenge = signal(false);
 
@@ -150,15 +146,14 @@ export class App {
     const p = this.pending();
     if (!p) return '';
     const n = p.episodes.length;
+    const what = plural(n, 'episódio', 'episódios');
+    const verb = n === 1 ? 'será apagado' : 'serão apagados';
     let text =
       p.kind === 'series'
-        ? `${n} episódio(s) de ${p.seriesCount} série(s) serão apagados do histórico.`
-        : `${n} episódio(s) serão apagados do histórico.`;
-    if (p.extra > 0) text += ` Isso inclui ${p.extra} que não estavam na lista carregada.`;
-    if (p.capped) {
-      text +=
-        ' A Crunchyroll só mostra os 1000 episódios mais recentes; se houver mais antigos, o app repete a remoção até acabar.';
-    }
+        ? `${what} de ${plural(p.seriesCount, 'série', 'séries')} ${verb} do histórico.`
+        : `${what} ${verb} do histórico.`;
+    if (p.extra > 0) text += ` Inclui ${p.extra} que não estavam na lista carregada.`;
+    if (p.capped) text += ' Se houver mais antigos, o app repete a remoção até acabar.';
     return text;
   });
 
@@ -290,7 +285,6 @@ export class App {
       }
       const loaded = new Set(this.episodes().map((e) => e.episodeId));
       const extra = episodes.filter((e) => !loaded.has(e.episodeId)).length;
-      this.backedUp.set(false);
       this.pending.set({
         kind: 'series',
         episodes,
@@ -314,7 +308,6 @@ export class App {
     const ids = this.selected();
     const episodes = this.episodes().filter((e) => ids.has(e.episodeId));
     if (episodes.length === 0) return;
-    this.backedUp.set(false);
     this.pending.set({
       kind: 'episodes',
       episodes,
@@ -327,24 +320,6 @@ export class App {
 
   protected closePending(): void {
     if (!this.removing()) this.pending.set(null);
-  }
-
-  /** Salva uma cópia (CSV) dos episódios que serão apagados, pelo menu Compartilhar. */
-  protected async saveBackup(): Promise<void> {
-    const p = this.pending();
-    if (!p || this.backupBusy()) return;
-    this.backupBusy.set(true);
-    try {
-      await this.backup.save(p.episodes);
-      this.backedUp.set(true);
-    } catch (e) {
-      const msg = (e as Error).message ?? '';
-      // Fechar o menu Compartilhar sem escolher nada não é erro.
-      if (!/cancel/i.test(msg))
-        this.error.set('Não foi possível gerar a cópia. Você ainda pode remover sem ela.');
-    } finally {
-      this.backupBusy.set(false);
-    }
   }
 
   protected cancelRemoval(): void {

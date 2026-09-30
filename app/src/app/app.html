@@ -763,15 +763,6 @@
           </button>
         </div>
       } @else {
-        <button type="button" class="btn w-full" [disabled]="backupBusy()" (click)="saveBackup()">
-          {{
-            backupBusy()
-              ? 'Gerando cópia…'
-              : backedUp()
-                ? 'Cópia enviada ✓ (salvar de novo)'
-                : 'Salvar cópia antes (CSV)'
-          }}
-        </button>
         <div class="grid grid-cols-2 gap-3">
           <button type="button" class="btn" (click)="closePending()">Cancelar</button>
           <button type="button" class="btn-danger" (click)="confirmRemoval()">Remover</button>
