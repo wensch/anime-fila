@@ -1,5 +1,7 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { BackupService } from './backup.service';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
@@ -14,6 +16,7 @@ import {
   groupBySeries,
 } from './history';
 import { Episode } from './models';
+import { BackState, backAction } from './navigation';
 import { SettingsService } from './settings.service';
 import { UpdateService } from './update.service';
 
@@ -52,7 +55,18 @@ export class App {
   protected readonly loginError = signal<string | null>(null);
 
   protected readonly tab = signal<Tab>('series');
-  protected readonly filters = signal<Filters>({ ...EMPTY_FILTERS });
+  /** Cada aba tem seus próprios filtros: o que se busca em Episódios não afeta Séries. */
+  protected readonly seriesFilters = signal<Filters>({ ...EMPTY_FILTERS });
+  protected readonly episodeFilters = signal<Filters>({ ...EMPTY_FILTERS });
+  /** Filtros da aba ativa (o que a interface mostra e edita). */
+  protected readonly filters = computed(() =>
+    this.tab() === 'series' ? this.seriesFilters() : this.episodeFilters(),
+  );
+  /** Título da série de onde veio a aba Episódios (mostra a faixa "← Todas as séries"). */
+  protected readonly drillTitle = signal<string | null>(null);
+  protected readonly filtersOpen = signal(false);
+  protected readonly menuOpen = signal(false);
+  protected readonly skeletons = [1, 2, 3, 4, 5, 6];
   protected readonly sort = signal<SeriesSort>('recent');
   protected readonly limit = signal(PAGE);
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
@@ -88,12 +102,21 @@ export class App {
     }));
   });
   protected readonly visibleSeries = computed(() =>
-    filterSeries(this.allSeries(), this.filters(), this.sort()),
+    filterSeries(this.allSeries(), this.seriesFilters(), this.sort()),
   );
   protected readonly visibleEpisodes = computed(() =>
-    filterEpisodes(this.episodes(), this.filters()),
+    filterEpisodes(this.episodes(), this.episodeFilters()),
   );
   protected readonly shownEpisodes = computed(() => this.visibleEpisodes().slice(0, this.limit()));
+  /** Filtros ativos além da busca por texto (vira o número no botão "Filtros"). */
+  protected readonly activeFilterCount = computed(() => {
+    const f = this.filters();
+    return [f.from, f.to, f.epMin, f.epMax, f.olderThanMonths].filter((v) => v !== '' && v !== null)
+      .length;
+  });
+  protected readonly limitReached = computed(
+    () => this.loaded() && this.episodes().length >= this.settings.maxEpisodes(),
+  );
   protected readonly hasFilters = computed(() => {
     const f = this.filters();
     return !!(
@@ -119,6 +142,15 @@ export class App {
   });
 
   constructor() {
+    // Some sozinho o aviso de sucesso depois de alguns segundos.
+    effect((onCleanup) => {
+      if (this.notice() === null) return;
+      const t = setTimeout(() => this.notice.set(null), 8000);
+      onCleanup(() => clearTimeout(t));
+    });
+    // Botão Voltar do Android (e evento equivalente para testes/navegador).
+    if (Capacitor.isNativePlatform()) void CapApp.addListener('backButton', () => this.onBack());
+    document.addEventListener('crunchysync:back', () => this.onBack());
     void this.update.check();
     // Ao voltar ao app (vindo de outro), confere de novo se há versão nova.
     document.addEventListener('visibilitychange', () => {
@@ -159,6 +191,11 @@ export class App {
     this.selectedSeries.set(new Set());
     this.error.set(null);
     this.challenge.set(false);
+    this.drillTitle.set(null);
+    this.seriesFilters.set({ ...EMPTY_FILTERS });
+    this.episodeFilters.set({ ...EMPTY_FILTERS });
+    this.selectMode.set(false);
+    this.tab.set('series');
   }
 
   /** Abre o site para concluir a verificação do Cloudflare e tenta de novo. */
@@ -305,7 +342,8 @@ export class App {
   // ---- filtros e seleção ----
 
   protected setFilter(patch: Partial<Filters>): void {
-    this.filters.update((f) => ({ ...f, ...patch }));
+    const target = this.tab() === 'series' ? this.seriesFilters : this.episodeFilters;
+    target.update((f) => ({ ...f, ...patch }));
     this.limit.set(PAGE);
   }
 
@@ -327,7 +365,12 @@ export class App {
   }
 
   protected clearFilters(): void {
-    this.filters.set({ ...EMPTY_FILTERS });
+    if (this.tab() === 'series') {
+      this.seriesFilters.set({ ...EMPTY_FILTERS });
+    } else {
+      this.episodeFilters.set({ ...EMPTY_FILTERS });
+      this.drillTitle.set(null);
+    }
     this.limit.set(PAGE);
   }
 
@@ -364,10 +407,84 @@ export class App {
     this.selected.set(new Set());
   }
 
+  /** Abre Episódios já filtrado pela série, com a faixa "← Todas as séries" para voltar. */
   protected showSeriesEpisodes(title: string): void {
-    this.clearFilters();
-    this.setFilter({ query: title });
+    this.episodeFilters.set({ ...EMPTY_FILTERS, query: title });
+    this.drillTitle.set(title);
+    this.selected.set(new Set());
+    this.filtersOpen.set(false);
+    this.limit.set(PAGE);
     this.tab.set('episodes');
+    window.scrollTo({ top: 0 });
+  }
+
+  protected setTab(t: Tab): void {
+    if (t === 'series' && this.drillTitle() !== null) this.backToSeries();
+    this.filtersOpen.set(false);
+    this.tab.set(t);
+    window.scrollTo({ top: 0 });
+  }
+
+  /** Volta de Episódios para Séries, desfazendo o filtro de "veio de uma série". */
+  protected backToSeries(): void {
+    if (this.drillTitle() !== null) this.episodeFilters.set({ ...EMPTY_FILTERS });
+    this.drillTitle.set(null);
+    this.filtersOpen.set(false);
+    this.tab.set('series');
+    window.scrollTo({ top: 0 });
+  }
+
+  // ---- menu, diagnóstico e botão Voltar ----
+
+  protected openDiagnostics(): void {
+    this.menuOpen.set(false);
+    this.showDiag.set(true);
+    window.scrollTo({ top: 0 });
+  }
+
+  protected async doLogout(): Promise<void> {
+    this.menuOpen.set(false);
+    await this.logout();
+  }
+
+  /** Decide o que o Voltar faz (ver navigation.ts) e aplica. */
+  private onBack(): void {
+    const state: BackState = {
+      updateOpen: this.update.available() !== null,
+      updateBusy: this.update.progress() !== null,
+      scanning: this.scanning(),
+      removing: this.removing(),
+      pendingOpen: this.pending() !== null,
+      menuOpen: this.menuOpen(),
+      diagOpen: this.showDiag(),
+      filtersOpen: this.filtersOpen(),
+      selectMode: this.selectMode(),
+      episodesSelected: this.selected().size,
+      tab: this.tab(),
+    };
+    switch (backAction(state)) {
+      case 'closeUpdate':
+        return this.update.dismiss();
+      case 'closePending':
+        return this.closePending();
+      case 'closeMenu':
+        return this.menuOpen.set(false);
+      case 'closeDiag':
+        return this.showDiag.set(false);
+      case 'closeFilters':
+        return this.filtersOpen.set(false);
+      case 'exitSelectMode':
+        return this.toggleSelectMode();
+      case 'clearEpisodeSelection':
+        return this.clearSelection();
+      case 'toSeries':
+        return this.backToSeries();
+      case 'exit':
+        if (Capacitor.isNativePlatform()) void CapApp.exitApp();
+        return;
+      default:
+        return; // 'consume': há uma operação em andamento
+    }
   }
 
   // ---- configuração e diagnóstico ----

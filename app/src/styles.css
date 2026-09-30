@@ -1,22 +1,57 @@
 @import 'tailwindcss';
 
+@layer base {
+  /* Foco visível para quem usa teclado/controle. */
+  :focus-visible {
+    outline: 2px solid var(--color-orange-400);
+    outline-offset: 2px;
+  }
+  button,
+  select,
+  input,
+  label {
+    touch-action: manipulation;
+  }
+}
+
 @layer components {
+  /* Alvos de toque de 48px (padrão do Android). */
   .field {
-    @apply w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100;
+    @apply min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-base text-zinc-100 placeholder:text-zinc-400;
   }
   .btn {
-    @apply rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-50;
+    @apply inline-flex min-h-12 items-center justify-center rounded-xl bg-zinc-800 px-4 text-sm font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-50;
   }
+  /* Laranja escuro: texto branco com contraste 5,2:1 (o laranja claro dava 3,6:1). */
   .btn-primary {
-    @apply rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-500 disabled:opacity-50;
+    @apply inline-flex min-h-12 items-center justify-center rounded-xl bg-orange-700 px-4 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50;
   }
   .btn-danger {
-    @apply rounded-lg bg-red-900/60 px-3 py-2 text-xs font-medium text-red-100 hover:bg-red-800 disabled:opacity-50;
+    @apply inline-flex min-h-12 items-center justify-center rounded-xl border border-red-800 bg-red-950 px-4 text-sm font-medium text-red-100 hover:bg-red-900 disabled:opacity-50;
   }
   .tab {
-    @apply rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-400;
+    @apply min-h-12 rounded-xl bg-zinc-900 px-3 text-sm font-medium text-zinc-300;
   }
   .tab-on {
-    @apply bg-orange-600 font-medium text-white;
+    @apply bg-orange-700 text-white;
+  }
+  .icon-btn {
+    @apply inline-flex h-12 w-12 items-center justify-center rounded-xl text-zinc-200 hover:bg-zinc-800 disabled:opacity-50;
+  }
+  .link {
+    @apply inline-flex min-h-12 items-center px-2 text-sm text-orange-400 underline;
+  }
+  .menu-item {
+    @apply flex min-h-12 w-full items-center rounded-lg px-3 text-left text-sm text-zinc-100 hover:bg-zinc-800;
+  }
+}
+
+/* Animações só para quem não pediu "reduzir movimento". */
+@media (prefers-reduced-motion: no-preference) {
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  .pulse {
+    animation: pulse 1.6s ease-in-out infinite;
   }
 }

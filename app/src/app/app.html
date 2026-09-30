@@ -1,33 +1,90 @@
-<main class="mx-auto max-w-5xl px-4 pb-24 pt-[max(1rem,env(safe-area-inset-top))]">
-  <header class="flex items-center justify-between gap-3 py-3">
+<main class="mx-auto max-w-5xl px-4 pb-28">
+  <header
+    class="flex items-center justify-between gap-3 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))]"
+  >
     <h1 class="text-xl font-bold tracking-tight">
       Crunchy<span class="text-orange-500">Sync</span>
     </h1>
-    <div class="flex gap-2">
+    <div class="relative flex items-center">
       @if (loggedIn()) {
-        <button type="button" class="btn" [disabled]="loading()" (click)="refresh()">
-          Atualizar
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Atualizar histórico"
+          [disabled]="loading()"
+          (click)="refresh()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="h-6 w-6"
+            [class.spin]="loading()"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
         </button>
       }
-      <button type="button" class="btn" (click)="showDiag.set(!showDiag())">Diagnóstico</button>
+      <button
+        type="button"
+        class="icon-btn"
+        aria-label="Mais opções"
+        aria-haspopup="menu"
+        [attr.aria-expanded]="menuOpen()"
+        (click)="menuOpen.set(!menuOpen())"
+      >
+        <svg viewBox="0 0 24 24" class="h-6 w-6" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="5" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="12" cy="19" r="1.8" />
+        </svg>
+      </button>
+      @if (menuOpen()) {
+        <button
+          type="button"
+          class="fixed inset-0 z-20 cursor-default"
+          aria-label="Fechar menu"
+          tabindex="-1"
+          (click)="menuOpen.set(false)"
+        ></button>
+        <div
+          role="menu"
+          class="absolute right-0 top-full z-30 mt-1 w-60 rounded-xl border border-zinc-700 bg-zinc-900 p-1 shadow-xl"
+        >
+          <button type="button" role="menuitem" class="menu-item" (click)="openDiagnostics()">
+            Diagnóstico
+          </button>
+          @if (loggedIn()) {
+            <button type="button" role="menuitem" class="menu-item" (click)="doLogout()">
+              Sair da conta
+            </button>
+          }
+        </div>
+      }
     </div>
   </header>
 
   @if (showDiag()) {
     <section class="mb-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-      <div class="mb-2 flex items-center justify-between">
+      <div class="mb-2 flex items-center justify-between gap-2">
         <h2 class="text-sm font-semibold">Diagnóstico</h2>
         <div class="flex gap-2">
           <button type="button" class="btn" (click)="copyLog()">
             {{ copied() ? 'Copiado!' : 'Copiar' }}
           </button>
           <button type="button" class="btn" (click)="diag.clear()">Limpar</button>
+          <button type="button" class="btn" (click)="showDiag.set(false)">Fechar</button>
         </div>
       </div>
       <pre
         class="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-zinc-950 p-2 text-[11px] text-zinc-300"
         >{{ diag.asText() || 'Nenhuma chamada ainda.' }}</pre>
-      <div class="mt-3 flex items-center justify-between gap-2 text-xs text-zinc-400">
+      <div class="mt-3 flex items-center justify-between gap-2 text-sm text-zinc-400">
         <span
           >Versão instalada: {{ update.currentBuild ? '#' + update.currentBuild : 'local' }}</span
         >
@@ -36,22 +93,18 @@
         </button>
       </div>
       @if (update.lastResult(); as r) {
-        <p class="mt-1 text-xs text-zinc-400">{{ r }}</p>
+        <p class="mt-1 text-sm text-zinc-400">{{ r }}</p>
       }
-      <p class="mt-2 text-xs text-zinc-500">
+      <p class="mt-2 text-xs text-zinc-400">
         Nunca contém senha ou token. Se algo falhar, envie um print desta tela.
       </p>
 
-      <button
-        type="button"
-        class="mt-3 text-xs text-orange-400 underline"
-        (click)="showAdvanced.set(!showAdvanced())"
-      >
+      <button type="button" class="link mt-1 -ml-2" (click)="showAdvanced.set(!showAdvanced())">
         Configurações avançadas da API
       </button>
       @if (showAdvanced()) {
         <form
-          class="mt-3 space-y-2 text-xs"
+          class="mt-2 space-y-3 text-sm text-zinc-300"
           (submit)="
             $event.preventDefault();
             saveConfig({
@@ -104,37 +157,15 @@
     </section>
   }
 
-  @if (error(); as msg) {
-    <div
-      role="alert"
-      class="mb-4 space-y-2 rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200"
-    >
-      <p>{{ msg }}</p>
-      @if (challenge()) {
-        <button type="button" class="btn-primary" (click)="resolveChallenge()">
-          Concluir verificação
-        </button>
-      }
-    </div>
-  }
-  @if (notice(); as msg) {
-    <p
-      role="status"
-      class="mb-4 flex items-center justify-between rounded-lg border border-emerald-900 bg-emerald-950 px-3 py-2 text-sm text-emerald-200"
-    >
-      {{ msg }}
-      <button
-        type="button"
-        class="ml-3 text-emerald-400"
-        aria-label="Fechar"
-        (click)="notice.set(null)"
-      >
-        ✕
-      </button>
-    </p>
-  }
-
   @if (!loggedIn()) {
+    @if (error(); as msg) {
+      <p
+        role="alert"
+        class="mb-4 rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200"
+      >
+        {{ msg }}
+      </p>
+    }
     <section
       class="mx-auto mt-6 max-w-sm space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5"
     >
@@ -149,132 +180,215 @@
       <button type="button" class="btn-primary w-full" [disabled]="loginBusy()" (click)="login()">
         {{ loginBusy() ? 'Aguardando login…' : 'Entrar' }}
       </button>
-      <p class="text-xs text-zinc-500">
+      <p class="text-xs text-zinc-400">
         Sua senha é digitada só no site da Crunchyroll: o app nunca a vê nem a guarda.
       </p>
     </section>
   } @else {
-    <nav class="mb-3 grid grid-cols-2 gap-2" aria-label="Visualização">
-      <button
-        type="button"
-        class="tab"
-        [class.tab-on]="tab() === 'series'"
-        (click)="tab.set('series')"
-      >
-        Séries ({{ allSeries().length }})
-      </button>
-      <button
-        type="button"
-        class="tab"
-        [class.tab-on]="tab() === 'episodes'"
-        (click)="tab.set('episodes')"
-      >
-        Episódios ({{ episodes().length }})
-      </button>
-    </nav>
-
-    <section class="mb-4 space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-      <input
-        type="search"
-        placeholder="Buscar por série ou episódio…"
-        class="field"
-        [value]="filters().query"
-        (input)="setFilter({ query: $any($event.target).value })"
-      />
-      <div class="grid grid-cols-2 gap-2 text-xs text-zinc-400">
-        <label
-          >De<input
-            type="date"
-            class="field"
-            [value]="filters().from"
-            (input)="setFilter({ from: $any($event.target).value })"
-        /></label>
-        <label
-          >Até<input
-            type="date"
-            class="field"
-            [value]="filters().to"
-            (input)="setFilter({ to: $any($event.target).value })"
-        /></label>
-        @if (tab() === 'episodes') {
-          <label
-            >Episódio a partir de<input
-              type="number"
-              min="0"
-              inputmode="numeric"
-              class="field"
-              [value]="filters().epMin ?? ''"
-              (input)="setNumber('epMin', $any($event.target).value)"
-          /></label>
-          <label
-            >Episódio até<input
-              type="number"
-              min="0"
-              inputmode="numeric"
-              class="field"
-              [value]="filters().epMax ?? ''"
-              (input)="setNumber('epMax', $any($event.target).value)"
-          /></label>
-        } @else {
-          <label class="col-span-2"
-            >Ordenar por
-            <select class="field" [value]="sort()" (change)="sort.set($any($event.target).value)">
-              <option value="recent">Assistido recentemente</option>
-              <option value="oldest">Assistido há mais tempo</option>
-              <option value="title">Título (A–Z)</option>
-              <option value="count">Mais episódios</option>
-            </select>
-          </label>
-        }
-      </div>
-      <label class="block text-xs text-zinc-400"
-        >Sem assistir há mais de
-        <select class="field" (change)="setStale($any($event.target).value)">
-          <option value="" [selected]="filters().olderThanMonths === null">Qualquer tempo</option>
-          @for (m of staleOptions; track m) {
-            <option [value]="m" [selected]="filters().olderThanMonths === m">
-              {{ m === 1 ? '1 mês' : m + ' meses' }}
-            </option>
-          }
-        </select>
-      </label>
-      <label class="block text-xs text-zinc-400"
-        >Carregar até (episódios do histórico)
-        <select class="field" (change)="setMaxEpisodes($any($event.target).value)">
-          @for (n of limits; track n) {
-            <option [value]="n" [selected]="n === settings.maxEpisodes()">
-              {{ limitLabel(n) }}
-            </option>
-          }
-        </select>
-      </label>
-      @if (loaded() && episodes().length >= settings.maxEpisodes()) {
-        <p class="text-xs text-amber-400">
-          Limite atingido ({{ episodes().length }}): pode haver mais episódios. Aumente o limite
-          para carregar mais.
-        </p>
-      }
-      @if (hasFilters()) {
-        <button type="button" class="text-xs text-orange-400 underline" (click)="clearFilters()">
-          Limpar filtros
+    <!-- Fixo no topo ao rolar: abas, busca, filtros e o caminho de volta. -->
+    <div
+      class="sticky top-[env(safe-area-inset-top)] z-10 -mx-4 space-y-2 bg-zinc-950/95 px-4 pb-2 pt-1 backdrop-blur"
+    >
+      <nav class="grid grid-cols-2 gap-2" aria-label="Visualização">
+        <button
+          type="button"
+          class="tab"
+          [class.tab-on]="tab() === 'series'"
+          [attr.aria-current]="tab() === 'series' ? 'page' : null"
+          (click)="setTab('series')"
+        >
+          Séries ({{ allSeries().length }})
         </button>
+        <button
+          type="button"
+          class="tab"
+          [class.tab-on]="tab() === 'episodes'"
+          [attr.aria-current]="tab() === 'episodes' ? 'page' : null"
+          (click)="setTab('episodes')"
+        >
+          Episódios ({{ episodes().length }})
+        </button>
+      </nav>
+
+      <div class="flex gap-2">
+        <input
+          type="search"
+          aria-label="Buscar"
+          placeholder="Buscar série ou episódio…"
+          class="field min-w-0 flex-1"
+          [value]="filters().query"
+          (input)="setFilter({ query: $any($event.target).value })"
+        />
+        <button
+          type="button"
+          class="btn shrink-0 gap-2"
+          [attr.aria-expanded]="filtersOpen()"
+          (click)="filtersOpen.set(!filtersOpen())"
+        >
+          Filtros
+          @if (activeFilterCount() > 0) {
+            <span class="rounded-full bg-orange-700 px-2 py-0.5 text-xs text-white">{{
+              activeFilterCount()
+            }}</span>
+          }
+        </button>
+      </div>
+
+      @if (tab() === 'episodes' && drillTitle(); as t) {
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn shrink-0" (click)="backToSeries()">
+            ← Todas as séries
+          </button>
+          <span class="min-w-0 truncate text-sm text-zinc-300">{{ t }}</span>
+        </div>
       }
-    </section>
+
+      @if (error(); as msg) {
+        <div
+          role="alert"
+          class="space-y-2 rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200"
+        >
+          <p>{{ msg }}</p>
+          @if (challenge()) {
+            <button type="button" class="btn-primary" (click)="resolveChallenge()">
+              Concluir verificação
+            </button>
+          }
+        </div>
+      }
+    </div>
+
+    @if (filtersOpen()) {
+      <section
+        class="mb-3 mt-1 space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3"
+        aria-label="Filtros"
+      >
+        <div class="grid grid-cols-2 gap-3 text-sm text-zinc-300">
+          <label
+            >De<input
+              type="date"
+              class="field"
+              [value]="filters().from"
+              (input)="setFilter({ from: $any($event.target).value })"
+          /></label>
+          <label
+            >Até<input
+              type="date"
+              class="field"
+              [value]="filters().to"
+              (input)="setFilter({ to: $any($event.target).value })"
+          /></label>
+          @if (tab() === 'episodes') {
+            <label
+              >Episódio a partir de<input
+                type="number"
+                min="0"
+                inputmode="numeric"
+                class="field"
+                [value]="filters().epMin ?? ''"
+                (input)="setNumber('epMin', $any($event.target).value)"
+            /></label>
+            <label
+              >Episódio até<input
+                type="number"
+                min="0"
+                inputmode="numeric"
+                class="field"
+                [value]="filters().epMax ?? ''"
+                (input)="setNumber('epMax', $any($event.target).value)"
+            /></label>
+          } @else {
+            <label class="col-span-2"
+              >Ordenar por
+              <select class="field" [value]="sort()" (change)="sort.set($any($event.target).value)">
+                <option value="recent">Assistido recentemente</option>
+                <option value="oldest">Assistido há mais tempo</option>
+                <option value="title">Título (A–Z)</option>
+                <option value="count">Mais episódios</option>
+              </select>
+            </label>
+          }
+        </div>
+        <label class="block text-sm text-zinc-300"
+          >Sem assistir há mais de
+          <select class="field" (change)="setStale($any($event.target).value)">
+            <option value="" [selected]="filters().olderThanMonths === null">Qualquer tempo</option>
+            @for (m of staleOptions; track m) {
+              <option [value]="m" [selected]="filters().olderThanMonths === m">
+                {{ m === 1 ? '1 mês' : m + ' meses' }}
+              </option>
+            }
+          </select>
+        </label>
+        <label class="block text-sm text-zinc-300"
+          >Carregar até (episódios do histórico)
+          <select class="field" (change)="setMaxEpisodes($any($event.target).value)">
+            @for (n of limits; track n) {
+              <option [value]="n" [selected]="n === settings.maxEpisodes()">
+                {{ limitLabel(n) }}
+              </option>
+            }
+          </select>
+        </label>
+        <div class="flex items-center justify-between gap-2">
+          @if (hasFilters()) {
+            <button type="button" class="link -ml-2" (click)="clearFilters()">
+              Limpar filtros
+            </button>
+          } @else {
+            <span></span>
+          }
+          <button type="button" class="btn-primary" (click)="filtersOpen.set(false)">
+            Concluído
+          </button>
+        </div>
+      </section>
+    }
 
     @if (loading() && episodes().length === 0) {
-      <p class="py-10 text-center text-zinc-400">Carregando histórico…</p>
+      <p class="sr-only" role="status">Carregando histórico…</p>
+      @if (tab() === 'series') {
+        <ul class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" aria-hidden="true">
+          @for (n of skeletons; track n) {
+            <li class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+              <div class="pulse aspect-video bg-zinc-800"></div>
+              <div class="space-y-2 p-3">
+                <div class="pulse h-4 w-3/4 rounded bg-zinc-800"></div>
+                <div class="pulse h-3 w-1/2 rounded bg-zinc-800"></div>
+                <div class="pulse h-12 rounded-xl bg-zinc-800"></div>
+              </div>
+            </li>
+          }
+        </ul>
+      } @else {
+        <ul class="mt-2 space-y-2" aria-hidden="true">
+          @for (n of skeletons; track n) {
+            <li class="pulse h-[4.5rem] rounded-xl border border-zinc-800 bg-zinc-900"></li>
+          }
+        </ul>
+      }
     } @else if (tab() === 'series') {
       @if (loading()) {
-        <p class="mb-2 text-center text-xs text-zinc-500">
+        <p class="mb-2 text-center text-xs text-zinc-400">
           Atualizando… (remoção liberada em instantes)
         </p>
+      }
+      @if (limitReached()) {
+        <button
+          type="button"
+          class="flex min-h-12 w-full items-center text-left text-sm text-amber-400"
+          (click)="filtersOpen.set(true)"
+        >
+          Limite de {{ settings.maxEpisodes() }} episódios atingido: pode haver mais. Toque para
+          ajustar.
+        </button>
       }
       @if (visibleSeries().length === 0) {
         <p class="py-10 text-center text-zinc-400">
           {{ loaded() ? 'Nenhuma série encontrada.' : '' }}
         </p>
       } @else {
-        <div class="mb-2 flex items-center justify-between text-xs text-zinc-400">
+        <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
           <span>
             {{ visibleSeries().length }} série(s)
             @if (selectMode()) {
@@ -282,11 +396,11 @@
             }
           </span>
           @if (selectMode()) {
-            <button type="button" class="text-orange-400 underline" (click)="toggleSelectMode()">
+            <button type="button" class="link -mr-2" (click)="toggleSelectMode()">
               Cancelar seleção
             </button>
           } @else {
-            <button type="button" class="text-orange-400 underline" (click)="toggleSelectMode()">
+            <button type="button" class="link -mr-2" (click)="toggleSelectMode()">
               Selecionar várias
             </button>
           }
@@ -309,19 +423,28 @@
                     loading="lazy"
                     class="h-full w-full object-cover"
                   />
+                } @else {
+                  <div
+                    class="flex h-full w-full items-center justify-center text-4xl font-bold text-zinc-600"
+                    aria-hidden="true"
+                  >
+                    {{ s.title.charAt(0).toUpperCase() }}
+                  </div>
                 }
                 @if (selectMode()) {
                   <label
-                    class="absolute left-2 top-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-black/60"
+                    class="absolute left-1 top-1 flex h-12 w-12 cursor-pointer items-center justify-center"
                   >
-                    <input
-                      type="checkbox"
-                      class="h-5 w-5 accent-orange-600"
-                      [attr.aria-label]="'Selecionar ' + s.title"
-                      [checked]="selectedSeries().has(s.seriesId)"
-                      (change)="toggleSeries(s.seriesId)"
-                      (click)="$event.stopPropagation()"
-                    />
+                    <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60">
+                      <input
+                        type="checkbox"
+                        class="h-5 w-5 accent-orange-600"
+                        [attr.aria-label]="'Selecionar ' + s.title"
+                        [checked]="selectedSeries().has(s.seriesId)"
+                        (change)="toggleSeries(s.seriesId)"
+                        (click)="$event.stopPropagation()"
+                      />
+                    </span>
                   </label>
                 }
               </div>
@@ -334,13 +457,13 @@
                   }
                 </p>
                 @if (!selectMode()) {
-                  <div class="grid grid-cols-2 gap-2">
-                    <button type="button" class="btn" (click)="showSeriesEpisodes(s.title)">
+                  <div class="grid grid-cols-2 gap-3">
+                    <button type="button" class="btn px-2" (click)="showSeriesEpisodes(s.title)">
                       Episódios
                     </button>
                     <button
                       type="button"
-                      class="btn-danger"
+                      class="btn-danger px-2"
                       [disabled]="scanning() || loading()"
                       (click)="startSeriesRemoval([s.seriesId])"
                     >
@@ -355,23 +478,33 @@
       }
     } @else {
       @if (loading()) {
-        <p class="mb-2 text-center text-xs text-zinc-500">
+        <p class="mb-2 text-center text-xs text-zinc-400">
           Atualizando… (remoção liberada em instantes)
         </p>
+      }
+      @if (limitReached()) {
+        <button
+          type="button"
+          class="flex min-h-12 w-full items-center text-left text-sm text-amber-400"
+          (click)="filtersOpen.set(true)"
+        >
+          Limite de {{ settings.maxEpisodes() }} episódios atingido: pode haver mais. Toque para
+          ajustar.
+        </button>
       }
       @if (visibleEpisodes().length === 0) {
         <p class="py-10 text-center text-zinc-400">
           {{ loaded() ? 'Nenhum episódio encontrado.' : '' }}
         </p>
       } @else {
-        <div class="mb-2 flex items-center justify-between text-xs text-zinc-400">
+        <div class="flex min-h-12 items-center justify-between gap-2 text-sm text-zinc-400">
           <span>{{ visibleEpisodes().length }} episódio(s)</span>
-          <span class="flex gap-3">
-            <button type="button" class="text-orange-400 underline" (click)="selectAllVisible()">
+          <span class="flex gap-1">
+            <button type="button" class="link" (click)="selectAllVisible()">
               Selecionar todos
             </button>
             @if (selected().size) {
-              <button type="button" class="text-orange-400 underline" (click)="clearSelection()">
+              <button type="button" class="link -mr-2" (click)="clearSelection()">
                 Limpar seleção
               </button>
             }
@@ -381,12 +514,12 @@
           @for (e of shownEpisodes(); track e.episodeId) {
             <li>
               <label
-                class="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2"
+                class="flex min-h-[4.5rem] cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2"
                 [class.border-orange-600]="selected().has(e.episodeId)"
               >
                 <input
                   type="checkbox"
-                  class="h-5 w-5 shrink-0 accent-orange-600"
+                  class="h-6 w-6 shrink-0 accent-orange-600"
                   [checked]="selected().has(e.episodeId)"
                   (change)="toggle(e.episodeId)"
                 />
@@ -409,7 +542,7 @@
                     {{ e.episodeTitle }}
                   </p>
                   @if (e.watchedAt) {
-                    <p class="text-[11px] text-zinc-500">
+                    <p class="text-xs text-zinc-400">
                       {{ e.watchedAt | date: 'dd/MM/yyyy HH:mm' }}
                     </p>
                   }
@@ -425,14 +558,25 @@
         }
       }
     }
-
-    <footer class="mt-8 text-center">
-      <button type="button" class="text-xs text-zinc-500 underline" (click)="logout()">
-        Sair da conta
-      </button>
-    </footer>
   }
 </main>
+
+@if (notice(); as msg) {
+  <div
+    role="status"
+    class="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 mx-auto flex max-w-md items-center justify-between gap-2 rounded-xl border border-emerald-800 bg-emerald-950 py-1 pl-4 pr-1 text-sm text-emerald-100 shadow-lg"
+  >
+    <span>{{ msg }}</span>
+    <button
+      type="button"
+      class="icon-btn shrink-0"
+      aria-label="Fechar aviso"
+      (click)="notice.set(null)"
+    >
+      ✕
+    </button>
+  </div>
+}
 
 @if (!pending() && !scanning()) {
   @if (tab() === 'episodes' && selected().size > 0) {
@@ -441,7 +585,7 @@
     >
       <button
         type="button"
-        class="btn-danger mx-auto block w-full max-w-md py-3"
+        class="btn-danger mx-auto flex w-full max-w-md"
         [disabled]="loading()"
         (click)="removeSelected()"
       >
@@ -454,7 +598,7 @@
     >
       <button
         type="button"
-        class="btn-danger mx-auto block w-full max-w-md py-3"
+        class="btn-danger mx-auto flex w-full max-w-md"
         [disabled]="loading()"
         (click)="removeSelectedSeries()"
       >
@@ -524,7 +668,7 @@
                 : 'Salvar cópia antes (CSV)'
           }}
         </button>
-        <div class="flex justify-end gap-2">
+        <div class="grid grid-cols-2 gap-3">
           <button type="button" class="btn" (click)="closePending()">Cancelar</button>
           <button type="button" class="btn-danger" (click)="confirmRemoval()">Remover</button>
         </div>
@@ -535,7 +679,7 @@
 
 @if (update.available(); as build) {
   <div
-    class="fixed inset-0 z-30 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+    class="fixed inset-0 z-40 flex items-end justify-center bg-black/70 p-4 sm:items-center"
     role="dialog"
     aria-modal="true"
   >
@@ -559,15 +703,11 @@
       }
       @if (update.downloadError(); as err) {
         <p role="alert" class="text-sm text-amber-300">{{ err }}</p>
-        <button
-          type="button"
-          class="text-xs text-orange-400 underline"
-          (click)="update.downloadInBrowser()"
-        >
+        <button type="button" class="link -ml-2" (click)="update.downloadInBrowser()">
           Baixar pelo navegador
         </button>
       }
-      <div class="flex justify-end gap-2">
+      <div class="grid grid-cols-2 gap-3">
         <button
           type="button"
           class="btn"
