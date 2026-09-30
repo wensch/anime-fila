@@ -1,42 +1,69 @@
 import { Injectable, signal } from '@angular/core';
+import { ApiConfig, DEFAULT_CONFIG } from './endpoints';
 
-const KEY_TOKEN = 'crunchysync.token';
-const KEY_API = 'crunchysync.apiUrl';
-
-function read(key: string): string {
-  try {
-    return localStorage.getItem(key) ?? '';
-  } catch {
-    return '';
-  }
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+  /** epoch ms */
+  expiresAt: number;
+  accountId: string | null;
 }
 
-function write(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* armazenamento indisponível: valor vale só na sessão */
-  }
+const KEY = 'crunchysync.v2';
+
+interface Stored {
+  session: Session | null;
+  config: ApiConfig;
+  deviceId: string;
 }
 
-/** Guarda token e URL do BFF no localStorage do dispositivo. */
+function load(): Stored {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(KEY) ?? 'null');
+    if (parsed) {
+      return {
+        session: parsed.session ?? null,
+        config: { ...DEFAULT_CONFIG, ...parsed.config },
+        deviceId: parsed.deviceId || crypto.randomUUID(),
+      };
+    }
+  } catch {
+    /* armazenamento indisponível ou corrompido */
+  }
+  return { session: null, config: { ...DEFAULT_CONFIG }, deviceId: crypto.randomUUID() };
+}
+
+/**
+ * Guarda no aparelho a sessão (tokens) e a configuração da API.
+ * A senha NUNCA é armazenada: só é usada no momento do login.
+ */
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
-  readonly token = signal(read(KEY_TOKEN));
-  readonly apiUrl = signal(read(KEY_API) || 'http://localhost:3000');
+  private readonly initial = load();
+  readonly session = signal<Session | null>(this.initial.session);
+  readonly config = signal<ApiConfig>(this.initial.config);
+  readonly deviceId = this.initial.deviceId;
 
-  save(apiUrl: string, token: string): void {
-    // Aceita o token colado com ou sem o prefixo "Bearer ".
-    const clean = token.trim().replace(/^Bearer\s+/i, '');
-    const url = apiUrl.trim().replace(/\/+$/, '');
-    this.token.set(clean);
-    this.apiUrl.set(url);
-    write(KEY_TOKEN, clean);
-    write(KEY_API, url);
+  setSession(session: Session | null): void {
+    this.session.set(session);
+    this.persist();
   }
 
-  clearToken(): void {
-    this.token.set('');
-    write(KEY_TOKEN, '');
+  setConfig(config: ApiConfig): void {
+    this.config.set(config);
+    this.persist();
+  }
+
+  resetConfig(): void {
+    this.setConfig({ ...DEFAULT_CONFIG });
+  }
+
+  private persist(): void {
+    try {
+      const data: Stored = { session: this.session(), config: this.config(), deviceId: this.deviceId };
+      localStorage.setItem(KEY, JSON.stringify(data));
+    } catch {
+      /* sem armazenamento: a sessão vale só até fechar o app */
+    }
   }
 }

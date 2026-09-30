@@ -1,9 +1,11 @@
 node_modules/
 dist/
 .angular/
-android/app/build/
-android/build/
-android/.gradle/
-android/local.properties
-android/app/src/main/assets/public/
-android/capacitor-cordova-android-plugins/
+app/android/app/build/
+app/android/build/
+app/android/.gradle/
+app/android/local.properties
+app/android/app/src/main/assets/public/
+app/android/capacitor-cordova-android-plugins/
+*.keystore
+*.jks

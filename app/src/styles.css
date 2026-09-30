@@ -1,1 +1,22 @@
 @import "tailwindcss";
+
+@layer components {
+  .field {
+    @apply w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100;
+  }
+  .btn {
+    @apply rounded-lg bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-500 disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply rounded-lg bg-red-900/60 px-3 py-2 text-xs font-medium text-red-100 hover:bg-red-800 disabled:opacity-50;
+  }
+  .tab {
+    @apply rounded-lg bg-zinc-900 px-3 py-2 text-sm text-zinc-400;
+  }
+  .tab-on {
+    @apply bg-orange-600 font-medium text-white;
+  }
+}

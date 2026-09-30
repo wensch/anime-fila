@@ -1,0 +1,24 @@
+export interface Episode {
+  episodeId: string;
+  seriesId: string;
+  seriesTitle: string;
+  episodeTitle: string | null;
+  episodeNumber: number | null;
+  coverUrl: string | null;
+  /** ISO 8601 ou null se a API não informou. */
+  watchedAt: string | null;
+}
+
+export interface Series {
+  seriesId: string;
+  title: string;
+  coverUrl: string | null;
+  episodeCount: number;
+  lastWatchedAt: string | null;
+  episodeIds: string[];
+}
+
+export interface DeleteOutcome {
+  deleted: string[];
+  failed: { id: string; error: string }[];
+}
