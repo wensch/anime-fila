@@ -234,12 +234,28 @@
     <div class="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-5">
       <h2 class="text-lg font-semibold">Nova versão disponível</h2>
       <p class="text-sm text-zinc-300">
-        O build #{{ build }} está disponível (você tem o #{{ update.currentBuild }}). Toque em Atualizar para baixar;
-        quando terminar, abra o arquivo baixado e confirme a instalação. Seu login continua.
+        O build #{{ build }} está disponível (você tem o #{{ update.currentBuild }}). O app baixa a atualização e abre a
+        confirmação de instalação do Android. Seu login continua.
       </p>
+      @if (update.progress(); as pct) {
+        <div class="h-2 overflow-hidden rounded-full bg-zinc-800" role="progressbar" [attr.aria-valuenow]="pct">
+          <div class="h-full bg-orange-500 transition-all" [style.width.%]="pct"></div>
+        </div>
+        <p class="text-xs text-zinc-400">Baixando… {{ pct }}%</p>
+      } @else if (update.progress() === 0) {
+        <p class="text-xs text-zinc-400">Iniciando download…</p>
+      }
+      @if (update.downloadError(); as err) {
+        <p role="alert" class="text-sm text-amber-300">{{ err }}</p>
+        <button type="button" class="text-xs text-orange-400 underline" (click)="update.downloadInBrowser()">
+          Baixar pelo navegador
+        </button>
+      }
       <div class="flex justify-end gap-2">
-        <button type="button" class="btn" (click)="update.dismiss()">Depois</button>
-        <button type="button" class="btn-primary" (click)="update.download(); update.dismiss()">Atualizar</button>
+        <button type="button" class="btn" [disabled]="update.progress() !== null" (click)="update.dismiss()">Depois</button>
+        <button type="button" class="btn-primary" [disabled]="update.progress() !== null" (click)="update.download()">
+          Atualizar
+        </button>
       </div>
     </div>
   </div>
