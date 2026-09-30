@@ -64,7 +64,7 @@ public class PageFetchPlugin extends Plugin {
         s.setDomStorageEnabled(true);
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
-        cm.setAcceptThirdPartyCookie(web, true);
+        cm.setAcceptThirdPartyCookies(web, true);
         web.addJavascriptInterface(new Bridge(), "CSBridge");
         web.setWebViewClient(new WebViewClient() {
             @Override
