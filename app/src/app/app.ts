@@ -1,24 +1,31 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
+import { BackupService } from './backup.service';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
-import { ApiConfig, EPISODE_LIMITS } from './endpoints';
+import { ApiConfig, EPISODE_LIMITS, FULL_SCAN_LIMIT } from './endpoints';
 import {
   EMPTY_FILTERS,
   Filters,
   SeriesSort,
+  episodesOfSeries,
   filterEpisodes,
   filterSeries,
   groupBySeries,
 } from './history';
-import { Episode, Series } from './models';
+import { Episode } from './models';
 import { SettingsService } from './settings.service';
 import { UpdateService } from './update.service';
 
 type Tab = 'series' | 'episodes';
-type Pending =
-  | { kind: 'series'; series: Series }
-  | { kind: 'episodes'; ids: string[] };
+/** O que será removido (já com os episódios exatos) e aguarda confirmação. */
+interface Pending {
+  kind: 'series' | 'episodes';
+  episodes: Episode[];
+  seriesCount: number;
+  /** Episódios que existem no histórico mas não estavam na lista carregada. */
+  extra: number;
+}
 
 const PAGE = 100;
 
@@ -29,6 +36,7 @@ const PAGE = 100;
 })
 export class App {
   private readonly cr = inject(CrunchyrollService);
+  private readonly backup = inject(BackupService);
   protected readonly settings = inject(SettingsService);
   protected readonly diag = inject(DiagnosticsService);
   protected readonly update = inject(UpdateService);
@@ -50,6 +58,15 @@ export class App {
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
   protected readonly pending = signal<Pending | null>(null);
   protected readonly removing = signal(false);
+  protected readonly selectedSeries = signal<ReadonlySet<string>>(new Set());
+  /** Conferindo o histórico completo antes de mostrar a confirmação de remoção de séries. */
+  protected readonly scanning = signal(false);
+  protected readonly removeProgress = signal<{ done: number; total: number } | null>(null);
+  protected readonly cancelRequested = signal(false);
+  protected readonly backupBusy = signal(false);
+  protected readonly backedUp = signal(false);
+  /** Verificação do Cloudflare pendente: mostra o botão para concluí-la. */
+  protected readonly challenge = signal(false);
 
   protected readonly limits = EPISODE_LIMITS;
   protected readonly showDiag = signal(false);
@@ -76,10 +93,13 @@ export class App {
   protected readonly pendingText = computed(() => {
     const p = this.pending();
     if (!p) return '';
-    if (p.kind === 'series') {
-      return `Todos os ${p.series.episodeCount} episódios de "${p.series.title}" serão apagados do histórico.`;
-    }
-    return `${p.ids.length} episódio(s) serão apagados do histórico.`;
+    const n = p.episodes.length;
+    let text =
+      p.kind === 'series'
+        ? `${n} episódio(s) de ${p.seriesCount} série(s) serão apagados do histórico.`
+        : `${n} episódio(s) serão apagados do histórico.`;
+    if (p.extra > 0) text += ` Isso inclui ${p.extra} que não estavam na lista carregada.`;
+    return text;
   });
 
   constructor() {
@@ -102,11 +122,22 @@ export class App {
     }
   }
 
-  protected logout(): void {
-    this.cr.logout();
+  protected async logout(): Promise<void> {
+    await this.cr.logout();
     this.episodes.set([]);
     this.loaded.set(false);
     this.selected.set(new Set());
+    this.selectedSeries.set(new Set());
+    this.error.set(null);
+    this.challenge.set(false);
+  }
+
+  /** Abre o site para concluir a verificação do Cloudflare e tenta de novo. */
+  protected async resolveChallenge(): Promise<void> {
+    await this.cr.openVerification();
+    this.challenge.set(false);
+    this.error.set(null);
+    await this.refresh();
   }
 
   // ---- dados ----
@@ -118,6 +149,7 @@ export class App {
       this.episodes.set(await this.cr.listHistory(this.settings.maxEpisodes()));
       this.loaded.set(true);
       this.selected.set(new Set());
+      this.selectedSeries.set(new Set());
       void this.loadCovers();
     } catch (e) {
       this.handleError(e);
@@ -143,27 +175,96 @@ export class App {
     }
   }
 
-  protected async confirmRemoval(): Promise<void> {
-    const p = this.pending();
-    if (!p) return;
-    const ids =
-      p.kind === 'series' ? [...p.series.episodeIds] : p.ids;
-    this.removing.set(true);
+  /** Confere o histórico COMPLETO e monta a lista exata de episódios das séries a remover. */
+  protected async startSeriesRemoval(seriesIds: string[]): Promise<void> {
+    if (seriesIds.length === 0 || this.scanning()) return;
+    this.scanning.set(true);
     this.error.set(null);
     try {
-      const { deleted, failed } = await this.cr.deleteEpisodes(ids);
+      const all = await this.cr.listHistory(FULL_SCAN_LIMIT);
+      const episodes = episodesOfSeries(all, seriesIds);
+      if (episodes.length === 0) {
+        this.notice.set('Nada a remover: essas séries já não estão no histórico.');
+        return;
+      }
+      const loaded = new Set(this.episodes().map((e) => e.episodeId));
+      const extra = episodes.filter((e) => !loaded.has(e.episodeId)).length;
+      this.backedUp.set(false);
+      this.pending.set({ kind: 'series', episodes, seriesCount: seriesIds.length, extra });
+    } catch (e) {
+      this.handleError(e);
+    } finally {
+      this.scanning.set(false);
+    }
+  }
+
+  protected removeSelectedSeries(): void {
+    void this.startSeriesRemoval([...this.selectedSeries()]);
+  }
+
+  protected removeSelected(): void {
+    const ids = this.selected();
+    const episodes = this.episodes().filter((e) => ids.has(e.episodeId));
+    if (episodes.length === 0) return;
+    this.backedUp.set(false);
+    this.pending.set({ kind: 'episodes', episodes, seriesCount: 0, extra: 0 });
+  }
+
+  protected closePending(): void {
+    if (!this.removing()) this.pending.set(null);
+  }
+
+  /** Salva uma cópia (CSV) dos episódios que serão apagados, pelo menu Compartilhar. */
+  protected async saveBackup(): Promise<void> {
+    const p = this.pending();
+    if (!p || this.backupBusy()) return;
+    this.backupBusy.set(true);
+    try {
+      await this.backup.save(p.episodes);
+      this.backedUp.set(true);
+    } catch (e) {
+      const msg = (e as Error).message ?? '';
+      // Fechar o menu Compartilhar sem escolher nada não é erro.
+      if (!/cancel/i.test(msg)) this.error.set('Não foi possível gerar a cópia. Você ainda pode remover sem ela.');
+    } finally {
+      this.backupBusy.set(false);
+    }
+  }
+
+  protected cancelRemoval(): void {
+    this.cancelRequested.set(true);
+  }
+
+  protected async confirmRemoval(): Promise<void> {
+    const p = this.pending();
+    if (!p || this.removing()) return;
+    const ids = p.episodes.map((e) => e.episodeId);
+    this.removing.set(true);
+    this.cancelRequested.set(false);
+    this.error.set(null);
+    this.removeProgress.set({ done: 0, total: ids.length });
+    try {
+      const { deleted, failed, cancelled } = await this.cr.deleteEpisodes(ids, {
+        onProgress: (done, total) => this.removeProgress.set({ done, total }),
+        isCancelled: () => this.cancelRequested(),
+      });
       const gone = new Set(deleted);
       this.episodes.update((list) => list.filter((e) => !gone.has(e.episodeId)));
       this.selected.update((s) => new Set([...s].filter((id) => !gone.has(id))));
+      const alive = new Set(this.allSeries().map((s) => s.seriesId));
+      this.selectedSeries.update((s) => new Set([...s].filter((id) => alive.has(id))));
       this.notice.set(
-        failed.length
-          ? `${deleted.length} de ${ids.length} removidos; ${failed.length} falharam. Veja o Diagnóstico.`
-          : `${deleted.length} episódio(s) removido(s).`,
+        cancelled
+          ? `Cancelado: ${deleted.length} de ${ids.length} episódios foram removidos.`
+          : failed.length
+            ? `${deleted.length} de ${ids.length} removidos; ${failed.length} falharam. Veja o Diagnóstico.`
+            : `${deleted.length} episódio(s) removido(s).`,
       );
     } catch (e) {
       this.handleError(e);
     } finally {
       this.removing.set(false);
+      this.removeProgress.set(null);
       this.pending.set(null);
     }
   }
@@ -200,16 +301,28 @@ export class App {
     });
   }
 
+  protected toggleSeries(id: string): void {
+    this.selectedSeries.update((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  protected clearSeriesSelection(): void {
+    this.selectedSeries.set(new Set());
+  }
+
+  protected selectAllSeries(): void {
+    this.selectedSeries.set(new Set(this.visibleSeries().map((s) => s.seriesId)));
+  }
+
   protected selectAllVisible(): void {
     this.selected.set(new Set(this.visibleEpisodes().map((e) => e.episodeId)));
   }
 
   protected clearSelection(): void {
     this.selected.set(new Set());
-  }
-
-  protected removeSelected(): void {
-    this.pending.set({ kind: 'episodes', ids: [...this.selected()] });
   }
 
   protected showSeriesEpisodes(title: string): void {
@@ -242,6 +355,7 @@ export class App {
       this.loginError.set('Sua sessão expirou. Entre novamente.');
     } else if (e instanceof ApiError) {
       this.error.set(e.message);
+      this.challenge.set(e.code === 'CHALLENGE');
     } else {
       this.error.set('Erro inesperado. Veja o Diagnóstico.');
     }

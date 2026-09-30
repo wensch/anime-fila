@@ -33,3 +33,7 @@ export const PAGE_SIZE = 100;
 export const EPISODE_LIMITS = [100, 200, 400, 500, 1000, 2000];
 export const DEFAULT_MAX_EPISODES = 500;
 export const DELETE_CONCURRENCY = 5;
+/** Tentativas extras (com espera crescente) quando a API responde 429 ou 5xx. */
+export const MAX_RETRIES = 3;
+/** Teto da varredura completa do histórico antes de remover séries. */
+export const FULL_SCAN_LIMIT = 5000;

@@ -21,4 +21,6 @@ export interface Series {
 export interface DeleteOutcome {
   deleted: string[];
   failed: { id: string; error: string }[];
+  /** true se o usuário cancelou antes de terminar. */
+  cancelled?: boolean;
 }

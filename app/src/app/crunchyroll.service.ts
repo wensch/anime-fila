@@ -1,7 +1,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Injectable, inject } from '@angular/core';
 import { DiagnosticsService } from './diagnostics.service';
-import { AUTH_PATH, DELETE_CONCURRENCY, PAGE_SIZE } from './endpoints';
+import { AUTH_PATH, DELETE_CONCURRENCY, MAX_RETRIES, PAGE_SIZE } from './endpoints';
 import { extractSeriesCovers, normalizeHistoryItem } from './history';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
@@ -11,6 +11,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** 'CHALLENGE' = verificação do Cloudflare pendente. */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -18,6 +20,8 @@ export class ApiError extends Error {
 
 /** A sessão expirou e não deu para renová-la: o usuário precisa entrar de novo. */
 export class SessionExpiredError extends Error {}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const fill = (tpl: string, vars: Record<string, string>) =>
   tpl.replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(vars[k]));
@@ -86,8 +90,29 @@ export class CrunchyrollService {
     });
   }
 
-  logout(): void {
+  /** Sai da conta de verdade: apaga a sessão do app e os cookies do site no WebView. */
+  async logout(): Promise<void> {
     this.settings.setSession(null);
+    if (this.native) {
+      try {
+        await PageFetch.clearSession();
+      } catch (e) {
+        this.diag.log(`sair: não foi possível limpar o WebView (${(e as Error).message})`);
+      }
+    }
+  }
+
+  /** Mostra o site em tela cheia para concluir uma verificação do Cloudflare; resolve ao fechar. */
+  async openVerification(): Promise<void> {
+    if (!this.native) return;
+    await PageFetch.show({ url: `${this.settings.config().baseUrl}/` });
+    await new Promise<void>((resolve) => {
+      const handles: { remove(): Promise<void> }[] = [];
+      void PageFetch.addListener('closed', () => {
+        handles.forEach((h) => void h.remove());
+        resolve();
+      }).then((h) => handles.push(h));
+    });
   }
 
   /** Carrega até `max` episódios (mais recentes primeiro), pedindo páginas de 100. */
@@ -138,12 +163,23 @@ export class CrunchyrollService {
     return covers;
   }
 
-  /** Apaga em lotes paralelos; falhas individuais não interrompem o resto. */
-  async deleteEpisodes(ids: string[]): Promise<DeleteOutcome> {
+  /**
+   * Apaga em lotes paralelos; falhas individuais não interrompem o resto.
+   * `onProgress` recebe (feitos, total) a cada lote; `isCancelled` é checado entre lotes.
+   */
+  async deleteEpisodes(
+    ids: string[],
+    opts: { onProgress?: (done: number, total: number) => void; isCancelled?: () => boolean } = {},
+  ): Promise<DeleteOutcome> {
     const accountId = await this.accountId();
     const tpl = this.settings.config().deletePath;
-    const out: DeleteOutcome = { deleted: [], failed: [] };
+    const out: DeleteOutcome = { deleted: [], failed: [], cancelled: false };
+    opts.onProgress?.(0, ids.length);
     for (let i = 0; i < ids.length; i += DELETE_CONCURRENCY) {
+      if (opts.isCancelled?.()) {
+        out.cancelled = true;
+        break;
+      }
       const chunk = ids.slice(i, i + DELETE_CONCURRENCY);
       const results = await Promise.allSettled(
         chunk.map((id) => this.authed('DELETE', fill(tpl, { account: accountId, id }))),
@@ -153,6 +189,7 @@ export class CrunchyrollService {
         else if (r.reason instanceof SessionExpiredError) throw r.reason;
         else out.failed.push({ id: chunk[idx], error: (r.reason as Error).message });
       });
+      opts.onProgress?.(out.deleted.length + out.failed.length, ids.length);
     }
     return out;
   }
@@ -213,7 +250,7 @@ export class CrunchyrollService {
       const code = (e as { code?: string }).code;
       this.diag.log(`${method} ${path} -> FALHA: ${code ?? ''} ${(e as Error).message}`);
       if (code === 'CHALLENGE') {
-        throw new ApiError(403, 'A Crunchyroll pediu uma verificação. Toque em "Entrar" para concluí-la.');
+        throw new ApiError(403, 'A Crunchyroll pediu uma verificação de segurança.', 'CHALLENGE');
       }
       throw new ApiError(0, 'Sem conexão com a Crunchyroll. Verifique sua internet.');
     }
@@ -274,28 +311,38 @@ export class CrunchyrollService {
     return s.accessToken;
   }
 
+  /** Chamada autenticada: renova o token no 401 e tenta de novo (com espera) em 429/5xx. */
   private async authed(
     method: 'GET' | 'DELETE',
     path: string,
     opts: { params?: Record<string, string> } = {},
   ): Promise<unknown> {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let refreshed = false;
+    let retries = 0;
+    for (;;) {
       const token = await this.validToken();
       const res = await this.http(method, path, {
         headers: { Authorization: `Bearer ${token}` },
         params: opts.params,
       });
       if (res.ok) return res.data;
-      if (res.status === 401 && attempt === 0) {
+      if (res.status === 401) {
+        if (refreshed) {
+          this.settings.setSession(null);
+          throw new SessionExpiredError('Sessão expirada');
+        }
+        refreshed = true;
         await this.refresh();
         continue;
       }
-      if (res.status === 401) {
-        this.settings.setSession(null);
-        throw new SessionExpiredError('Sessão expirada');
+      if ((res.status === 429 || res.status >= 500) && retries < MAX_RETRIES) {
+        const wait = 1000 * 2 ** retries; // 1s, 2s, 4s
+        retries++;
+        this.diag.log(`${method} ${path}: ${res.status}, nova tentativa ${retries}/${MAX_RETRIES} em ${wait / 1000}s`);
+        await sleep(wait);
+        continue;
       }
       throw new ApiError(res.status, `Crunchyroll respondeu ${res.status} em ${method} ${path}`);
     }
-    throw new ApiError(500, 'Falha inesperada');
   }
 }

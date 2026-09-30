@@ -3,6 +3,7 @@
 App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem computador:
 
 - **Séries:** histórico agrupado por série (como no iOS), com remoção da série inteira num toque.
+- **Remoção em massa:** marque várias séries e remova de uma vez; o app confere o histórico completo antes (inclusive episódios além do limite "Carregar até"), oferece **salvar uma cópia em CSV** antes de apagar, mostra o progresso e permite cancelar.
 - **Episódios:** lista completa, filtro por texto, intervalo de datas e número do episódio; seleção múltipla para remover episódios avulsos.
 - **Login na página oficial:** o app abre o site da Crunchyroll num WebView; você digita e-mail e senha lá (o app nunca os vê) e a sessão é renovada pelo cookie do site.
 - **Sem servidor:** todas as chamadas saem de dentro desse WebView (plugin Android `PageFetch`, em `app/android/.../PageFetchPlugin.java`), com o IP do seu celular. Isso é necessário porque o Cloudflare da Crunchyroll barra clientes HTTP comuns (erro 403 "Just a moment...").
@@ -15,7 +16,11 @@ App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem c
 
 O APK é gerado pelo workflow `.github/workflows/apk.yml` a cada push em `main` ou `claude/**` (também dá para rodar manualmente em Actions > Build APK).
 
-### Atualizar sem desinstalar (opcional)
+### Atualizações
+
+O app avisa quando há build novo na release e atualiza por dentro (baixa o APK, mostra o progresso e abre a confirmação do Android; na primeira vez o Android pede para permitir instalar apps desta fonte). Precisa da assinatura fixa abaixo.
+
+### Assinatura fixa (obrigatória para atualizar por cima)
 
 Sem configuração, o APK é assinado com uma chave de debug que muda a cada build; para atualizar, desinstale a versão anterior antes (você só precisa entrar de novo). Para assinar sempre com a mesma chave, crie um keystore e adicione estes *secrets* no repositório: `ANDROID_KEYSTORE_BASE64` (o arquivo em base64), `ANDROID_KEYSTORE_PASSWORD` e `ANDROID_KEY_ALIAS`.
 

@@ -49,6 +49,7 @@ public class PageFetchPlugin extends Plugin {
     private WebView web;
     private boolean ready = false;
     private boolean loadStarted = false;
+    private boolean visible = false;
 
     @Override
     public void load() {
@@ -106,11 +107,13 @@ public class PageFetchPlugin extends Plugin {
         root.setAlpha(1f);
         root.setVisibility(View.VISIBLE);
         root.bringToFront();
+        visible = true;
     }
 
     private void hideViews() {
         root.setLayoutParams(new FrameLayout.LayoutParams(1, 1, Gravity.TOP | Gravity.START));
         root.setAlpha(0f);
+        visible = false;
     }
 
     // ---------------------------------------------------------------- methods
@@ -126,6 +129,31 @@ public class PageFetchPlugin extends Plugin {
                 ready = false;
                 web.loadUrl(url);
             }
+            call.resolve();
+        });
+    }
+
+    /** Botão Voltar do Android: se o WebView está em tela cheia, fecha-o em vez de sair do app. */
+    public boolean handleBack() {
+        if (root == null || !visible) return false;
+        hideViews();
+        notifyListeners("closed", new JSObject());
+        return true;
+    }
+
+    /** Sair da conta de verdade: apaga cookies e dados do site da Crunchyroll no WebView. */
+    @PluginMethod
+    public void clearSession(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            // Só o localStorage/sessionStorage da página da Crunchyroll (o do app fica intacto).
+            web.evaluateJavascript("try{localStorage.clear();sessionStorage.clear();}catch(e){}", null);
+            CookieManager cm = CookieManager.getInstance();
+            cm.removeAllCookies(ok -> cm.flush());
+            web.clearCache(true);
+            web.clearHistory();
+            ready = false;
+            loadStarted = false;
+            web.loadUrl("about:blank");
             call.resolve();
         });
     }

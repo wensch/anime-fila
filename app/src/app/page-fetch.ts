@@ -10,6 +10,8 @@ export interface PageFetchResult {
 export interface PageFetchPlugin {
   show(opts: { url?: string }): Promise<void>;
   hide(): Promise<void>;
+  /** Apaga cookies e dados do site da Crunchyroll no WebView (sair da conta de verdade). */
+  clearSession(): Promise<void>;
   /** Rejeita com code 'CHALLENGE' se o Cloudflare não liberar a página a tempo. */
   ensureLoaded(opts: { url: string }): Promise<void>;
   fetch(opts: {

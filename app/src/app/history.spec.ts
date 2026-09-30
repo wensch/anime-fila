@@ -5,6 +5,7 @@ import {
   filterSeries,
   groupBySeries,
   normalizeHistoryItem,
+  episodesOfSeries,
   extractSeriesCovers,
   pickLargestImage,
   pickSeriesCover,
@@ -108,5 +109,13 @@ describe('capas de série', () => {
   it('extrai mapa id -> capa ignorando itens sem imagem', () => {
     const body = { data: [{ id: 'A', images: { poster_wide: [[img(800)]] } }, { id: 'B', images: {} }, { images: {} }] };
     expect(extractSeriesCovers(body)).toEqual({ A: 'w800' });
+  });
+});
+
+describe('episodesOfSeries', () => {
+  it('filtra pelas séries pedidas, mantendo a ordem', () => {
+    const eps = [ep('1', 'A', null), ep('2', 'B', null), ep('3', 'A', null), ep('4', 'C', null)];
+    expect(episodesOfSeries(eps, ['A', 'C']).map((e) => e.episodeId)).toEqual(['1', '3', '4']);
+    expect(episodesOfSeries(eps, [])).toEqual([]);
   });
 });

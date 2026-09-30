@@ -147,3 +147,9 @@ export function extractSeriesCovers(body: any): Record<string, string> {
   }
   return out;
 }
+
+/** Episódios pertencentes às séries indicadas (ordem preservada). */
+export function episodesOfSeries(episodes: Episode[], seriesIds: Iterable<string>): Episode[] {
+  const ids = new Set(seriesIds);
+  return episodes.filter((e) => ids.has(e.seriesId));
+}
