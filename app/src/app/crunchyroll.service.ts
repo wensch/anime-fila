@@ -118,35 +118,57 @@ export class CrunchyrollService {
 
   /** Carrega até `max` episódios (mais recentes primeiro), pedindo páginas de 100. */
   async listHistory(max: number): Promise<Episode[]> {
+    return (await this.scanHistory(max)).episodes;
+  }
+
+  /**
+   * Como listHistory, mas diz se o histórico pode ter mais do que o devolvido (`capped`):
+   * quando o limite foi atingido ou a API recusou uma página além da janela que ela entrega.
+   */
+  async scanHistory(max: number): Promise<{ episodes: Episode[]; capped: boolean }> {
     const accountId = await this.accountId();
     const path = fill(this.settings.config().historyPath, { account: accountId });
     const byId = new Map<string, Episode>();
     const maxPages = Math.ceil(max / PAGE_SIZE) + 2; // folga para páginas com repetidos
+    let capped = false;
     for (let page = 1; page <= maxPages; page++) {
-      const body: any = await this.authed('GET', path, {
-        params: {
-          page: String(page),
-          page_size: String(PAGE_SIZE),
-          locale: this.settings.config().locale,
-        },
-      });
+      let body: any;
+      try {
+        body = await this.authed('GET', path, {
+          params: {
+            page: String(page),
+            page_size: String(PAGE_SIZE),
+            locale: this.settings.config().locale,
+          },
+        });
+      } catch (e) {
+        // A API só entrega uma janela fixa (as ~1000 mais recentes): página além dela = 400.
+        if (e instanceof ApiError && e.status === 400 && page > 1) {
+          this.diag.log(
+            `histórico: a API recusou a página ${page}; usando as ${byId.size} já lidas`,
+          );
+          capped = true;
+          break;
+        }
+        throw e;
+      }
       const data: any[] = body?.data ?? [];
       const before = byId.size;
       for (const raw of data) {
         const ep = normalizeHistoryItem(raw);
         if (ep) byId.set(ep.episodeId, ep);
       }
-      const total = body?.total;
       this.diag.log(
-        `histórico p.${page}: ${data.length} itens, ${byId.size - before} novos, total=${total ?? '?'}`,
+        `histórico p.${page}: ${data.length} itens, ${byId.size - before} novos, total=${body?.total ?? '?'}`,
       );
       if (data.length === 0 || data.length < PAGE_SIZE) break;
       if (byId.size === before) break; // a API ignorou o número da página: evita laço
-      if (byId.size >= max) break;
-      // Não confia em `total`: só para quando a página vem incompleta, vazia ou repetida.
+      if (byId.size >= max) {
+        capped = true;
+        break;
+      }
     }
-    const episodes = [...byId.values()].slice(0, max);
-    return episodes;
+    return { episodes: [...byId.values()].slice(0, max), capped };
   }
 
   /** Capas oficiais das séries (em lotes de 20). Falhas não interrompem: devolve o que conseguir. */

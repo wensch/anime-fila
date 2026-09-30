@@ -3,8 +3,8 @@
 App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem computador:
 
 - **Séries:** histórico agrupado por série (como no iOS), com remoção da série inteira num toque.
-- **Remoção em massa:** marque várias séries e remova de uma vez; o app confere o histórico completo antes (inclusive episódios além do limite "Carregar até"), oferece **salvar uma cópia em CSV** antes de apagar, mostra o progresso e permite cancelar.
-- **Filtros:** texto, datas, ordenação e "sem assistir há mais de N meses" para achar o que está abandonado; "Carregar até" vai de 100 a Tudo (5000).
+- **Remoção em massa:** marque várias séries e remova de uma vez; o app confere o histórico completo antes (inclusive episódios além do limite "Carregar até") e, se houver mais antigos além da janela de 1000, repete a remoção até acabar; oferece **salvar uma cópia em CSV** antes de apagar, mostra o progresso e permite cancelar.
+- **Filtros:** texto, datas, ordenação e "sem assistir há mais de N meses" para achar o que está abandonado; "Carregar até" vai de 100 a 1000 (a API da Crunchyroll só entrega os 1000 episódios mais recentes; a página 11 dá erro 400).
 - **Navegação:** o botão Voltar do Android fecha painéis e menus, sai da seleção e volta de Episódios para Séries antes de sair do app; cada aba tem seus filtros; abas e busca ficam fixas ao rolar; alvos de toque de 48 px.
 - **Capas no aparelho:** as capas das séries são salvas no armazenamento do celular e abrem na hora, sem baixar de novo; as abas ficam montadas, então trocar de aba não recarrega nada.
 - **Abertura rápida:** mostra a última lista guardada na hora e atualiza por trás.

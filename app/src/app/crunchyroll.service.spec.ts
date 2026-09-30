@@ -157,3 +157,37 @@ describe('deleteEpisodes', () => {
     expect(out.deleted).toHaveLength(5); // só o primeiro lote de 5
   });
 });
+
+describe('scanHistory (janela de 1000 da API)', () => {
+  const full = (prefix: string) => Array.from({ length: 100 }, (_, i) => item(`${prefix}${i}`));
+
+  it('página além da janela (400) encerra a leitura sem erro e marca capped', async () => {
+    const { cr } = setup();
+    request
+      .mockResolvedValueOnce(ok({ data: full('a') }))
+      .mockResolvedValueOnce(ok({ data: full('b') }))
+      .mockResolvedValueOnce(ok({ error: 'format_validation_error' }, 400));
+    const r = await cr.scanHistory(5000);
+    expect(r.episodes).toHaveLength(200);
+    expect(r.capped).toBe(true);
+  });
+
+  it('400 na primeira página continua sendo erro', async () => {
+    const { cr } = setup();
+    request.mockResolvedValue(ok({}, 400));
+    await expect(cr.scanHistory(100)).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it('capped só quando o limite é atingido; página curta = histórico completo', async () => {
+    const { cr } = setup();
+    request.mockResolvedValueOnce(ok({ data: full('a') }));
+    expect((await cr.scanHistory(100)).capped).toBe(true);
+    request.mockReset();
+    request
+      .mockResolvedValueOnce(ok({ data: full('a') }))
+      .mockResolvedValueOnce(ok({ data: [item('z')] }));
+    const r = await cr.scanHistory(500);
+    expect(r.episodes).toHaveLength(101);
+    expect(r.capped).toBe(false);
+  });
+});

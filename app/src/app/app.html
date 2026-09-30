@@ -363,7 +363,7 @@
           </select>
         </label>
         <label class="block text-sm text-zinc-300"
-          >Carregar até (episódios do histórico)
+          >Carregar até (episódios do histórico; a Crunchyroll entrega no máximo 1000)
           <select class="field" (change)="setMaxEpisodes($any($event.target).value)">
             @for (n of limits; track n) {
               <option [value]="n" [selected]="n === settings.maxEpisodes()">
@@ -740,6 +740,18 @@
               : 'Removendo ' + prog.done + ' de ' + prog.total + '…'
           }}
         </p>
+        <div class="flex justify-end">
+          <button
+            type="button"
+            class="btn"
+            [disabled]="cancelRequested()"
+            (click)="cancelRemoval()"
+          >
+            Cancelar remoção
+          </button>
+        </div>
+      } @else if (removing()) {
+        <p class="text-sm text-zinc-300" role="status">{{ removePhase() }}</p>
         <div class="flex justify-end">
           <button
             type="button"

@@ -8,7 +8,13 @@ import { keyOf } from './cover-cache';
 import { plural } from './text';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
-import { ApiConfig, EPISODE_LIMITS, FULL_SCAN_LIMIT, limitLabel } from './endpoints';
+import {
+  ApiConfig,
+  EPISODE_LIMITS,
+  FULL_SCAN_LIMIT,
+  MAX_REMOVE_ROUNDS,
+  limitLabel,
+} from './endpoints';
 import {
   EMPTY_FILTERS,
   Filters,
@@ -31,6 +37,10 @@ interface Pending {
   seriesCount: number;
   /** Episódios que existem no histórico mas não estavam na lista carregada. */
   extra: number;
+  /** Séries alvo (remoção de séries). */
+  seriesIds: string[];
+  /** O histórico pode ter mais episódios antigos além da janela que a API entrega. */
+  capped: boolean;
 }
 
 const PAGE = 100;
@@ -84,6 +94,8 @@ export class App {
   protected readonly scanning = signal(false);
   protected readonly removeProgress = signal<{ done: number; total: number } | null>(null);
   protected readonly cancelRequested = signal(false);
+  /** Texto mostrado na remoção entre uma rodada e outra. */
+  protected readonly removePhase = signal('Removendo…');
   protected readonly backupBusy = signal(false);
   protected readonly backedUp = signal(false);
   /** Verificação do Cloudflare pendente: mostra o botão para concluí-la. */
@@ -143,6 +155,10 @@ export class App {
         ? `${n} episódio(s) de ${p.seriesCount} série(s) serão apagados do histórico.`
         : `${n} episódio(s) serão apagados do histórico.`;
     if (p.extra > 0) text += ` Isso inclui ${p.extra} que não estavam na lista carregada.`;
+    if (p.capped) {
+      text +=
+        ' A Crunchyroll só mostra os 1000 episódios mais recentes; se houver mais antigos, o app repete a remoção até acabar.';
+    }
     return text;
   });
 
@@ -266,7 +282,7 @@ export class App {
     this.scanning.set(true);
     this.error.set(null);
     try {
-      const all = await this.cr.listHistory(FULL_SCAN_LIMIT);
+      const { episodes: all, capped } = await this.cr.scanHistory(FULL_SCAN_LIMIT);
       const episodes = episodesOfSeries(all, seriesIds);
       if (episodes.length === 0) {
         this.notice.set('Nada a remover: essas séries já não estão no histórico.');
@@ -275,7 +291,14 @@ export class App {
       const loaded = new Set(this.episodes().map((e) => e.episodeId));
       const extra = episodes.filter((e) => !loaded.has(e.episodeId)).length;
       this.backedUp.set(false);
-      this.pending.set({ kind: 'series', episodes, seriesCount: seriesIds.length, extra });
+      this.pending.set({
+        kind: 'series',
+        episodes,
+        seriesCount: seriesIds.length,
+        extra,
+        seriesIds: [...seriesIds],
+        capped,
+      });
     } catch (e) {
       this.handleError(e);
     } finally {
@@ -292,7 +315,14 @@ export class App {
     const episodes = this.episodes().filter((e) => ids.has(e.episodeId));
     if (episodes.length === 0) return;
     this.backedUp.set(false);
-    this.pending.set({ kind: 'episodes', episodes, seriesCount: 0, extra: 0 });
+    this.pending.set({
+      kind: 'episodes',
+      episodes,
+      seriesCount: 0,
+      extra: 0,
+      seriesIds: [],
+      capped: false,
+    });
   }
 
   protected closePending(): void {
@@ -324,33 +354,58 @@ export class App {
   protected async confirmRemoval(): Promise<void> {
     const p = this.pending();
     if (!p || this.removing()) return;
-    const ids = p.episodes.map((e) => e.episodeId);
     this.removing.set(true);
     this.cancelRequested.set(false);
     this.error.set(null);
-    this.removeProgress.set({ done: 0, total: ids.length });
+    const deletedAll = new Set<string>();
+    let requested = p.episodes.length;
+    let failedCount = 0;
+    let cancelled = false;
+    let batch = p.episodes.map((e) => e.episodeId);
     try {
-      const { deleted, failed, cancelled } = await this.cr.deleteEpisodes(ids, {
-        onProgress: (done, total) => this.removeProgress.set({ done, total }),
-        isCancelled: () => this.cancelRequested(),
-      });
-      const gone = new Set(deleted);
-      this.episodes.update((list) => list.filter((e) => !gone.has(e.episodeId)));
-      this.settings.saveHistoryCache(this.episodes());
-      this.selected.update((s) => new Set([...s].filter((id) => !gone.has(id))));
-      if (p.kind === 'series') this.selectMode.set(false);
-      const alive = new Set(this.allSeries().map((s) => s.seriesId));
-      this.selectedSeries.update((s) => new Set([...s].filter((id) => alive.has(id))));
+      for (let round = 1; ; round++) {
+        this.removePhase.set('Removendo…');
+        this.removeProgress.set({ done: 0, total: batch.length });
+        const out = await this.cr.deleteEpisodes(batch, {
+          onProgress: (done, total) => this.removeProgress.set({ done, total }),
+          isCancelled: () => this.cancelRequested(),
+        });
+        out.deleted.forEach((id) => deletedAll.add(id));
+        failedCount += out.failed.length;
+        cancelled = !!out.cancelled;
+        // A API só mostra os ~1000 episódios mais recentes: depois de apagar, os mais antigos
+        // dessas séries "sobem" para dentro da janela. Confere de novo e apaga o que restou.
+        if (p.kind !== 'series' || !p.capped || cancelled) break;
+        if (out.deleted.length === 0 || round >= MAX_REMOVE_ROUNDS) break;
+        this.removeProgress.set(null);
+        this.removePhase.set('Procurando episódios mais antigos dessas séries…');
+        const again = await this.cr.scanHistory(FULL_SCAN_LIMIT);
+        const more = episodesOfSeries(again.episodes, p.seriesIds).filter(
+          (e) => !deletedAll.has(e.episodeId),
+        );
+        if (more.length === 0) break;
+        batch = more.map((e) => e.episodeId);
+        requested += batch.length;
+      }
       this.notice.set(
         cancelled
-          ? `Cancelado: ${deleted.length} de ${ids.length} episódios foram removidos.`
-          : failed.length
-            ? `${deleted.length} de ${ids.length} removidos; ${failed.length} falharam. Veja o Diagnóstico.`
-            : `${deleted.length} episódio(s) removido(s).`,
+          ? `Cancelado: ${deletedAll.size} de ${requested} episódios foram removidos.`
+          : failedCount
+            ? `${deletedAll.size} de ${requested} removidos; ${failedCount} falharam. Veja o Diagnóstico.`
+            : `${plural(deletedAll.size, 'episódio removido', 'episódios removidos')}.`,
       );
     } catch (e) {
       this.handleError(e);
     } finally {
+      // Reflete na tela o que foi apagado, mesmo se algo falhou no meio.
+      if (deletedAll.size > 0) {
+        this.episodes.update((list) => list.filter((e) => !deletedAll.has(e.episodeId)));
+        this.settings.saveHistoryCache(this.episodes());
+        this.selected.update((s) => new Set([...s].filter((id) => !deletedAll.has(id))));
+        const alive = new Set(this.allSeries().map((s) => s.seriesId));
+        this.selectedSeries.update((s) => new Set([...s].filter((id) => alive.has(id))));
+      }
+      if (p.kind === 'series') this.selectMode.set(false);
       this.removing.set(false);
       this.removeProgress.set(null);
       this.pending.set(null);
