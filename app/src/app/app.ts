@@ -59,6 +59,8 @@ export class App {
   protected readonly pending = signal<Pending | null>(null);
   protected readonly removing = signal(false);
   protected readonly selectedSeries = signal<ReadonlySet<string>>(new Set());
+  /** Modo "Selecionar várias" da aba Séries: só então as caixinhas aparecem. */
+  protected readonly selectMode = signal(false);
   /** Conferindo o histórico completo antes de mostrar a confirmação de remoção de séries. */
   protected readonly scanning = signal(false);
   protected readonly removeProgress = signal<{ done: number; total: number } | null>(null);
@@ -251,6 +253,7 @@ export class App {
       const gone = new Set(deleted);
       this.episodes.update((list) => list.filter((e) => !gone.has(e.episodeId)));
       this.selected.update((s) => new Set([...s].filter((id) => !gone.has(id))));
+      if (p.kind === 'series') this.selectMode.set(false);
       const alive = new Set(this.allSeries().map((s) => s.seriesId));
       this.selectedSeries.update((s) => new Set([...s].filter((id) => alive.has(id))));
       this.notice.set(
@@ -313,8 +316,9 @@ export class App {
     this.selectedSeries.set(new Set());
   }
 
-  protected selectAllSeries(): void {
-    this.selectedSeries.set(new Set(this.visibleSeries().map((s) => s.seriesId)));
+  protected toggleSelectMode(): void {
+    this.selectMode.update((v) => !v);
+    this.selectedSeries.set(new Set());
   }
 
   protected selectAllVisible(): void {
