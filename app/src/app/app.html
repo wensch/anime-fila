@@ -53,27 +53,22 @@
   }
 
   @if (!loggedIn()) {
-    <form class="mx-auto mt-6 max-w-sm space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5"
-      (submit)="$event.preventDefault(); login(email.value, pass.value)">
+    <section class="mx-auto mt-6 max-w-sm space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 class="text-lg font-semibold">Entrar na Crunchyroll</h2>
-      <label class="block text-sm">
-        <span class="mb-1 block text-zinc-400">E-mail</span>
-        <input #email type="email" required autocomplete="username" class="field" />
-      </label>
-      <label class="block text-sm">
-        <span class="mb-1 block text-zinc-400">Senha</span>
-        <input #pass type="password" required autocomplete="current-password" class="field" />
-      </label>
+      <p class="text-sm text-zinc-300">
+        Vai abrir a página oficial da Crunchyroll dentro do app. Entre com seu e-mail e senha
+        normalmente e, se aparecer uma verificação, conclua-a.
+      </p>
       @if (loginError(); as msg) {
         <p role="alert" class="text-sm text-red-300">{{ msg }}</p>
       }
-      <button type="submit" class="btn-primary w-full" [disabled]="loginBusy()">
-        {{ loginBusy() ? 'Entrando…' : 'Entrar' }}
+      <button type="button" class="btn-primary w-full" [disabled]="loginBusy()" (click)="login()">
+        {{ loginBusy() ? 'Aguardando login…' : 'Entrar' }}
       </button>
       <p class="text-xs text-zinc-500">
-        Sua senha vai direto do aparelho para a Crunchyroll e não é armazenada. Só a sessão fica salva neste aparelho.
+        Sua senha é digitada só no site da Crunchyroll: o app nunca a vê nem a guarda.
       </p>
-    </form>
+    </section>
   } @else {
     <nav class="mb-3 grid grid-cols-2 gap-2" aria-label="Visualização">
       <button type="button" class="tab" [class.tab-on]="tab() === 'series'" (click)="tab.set('series')">

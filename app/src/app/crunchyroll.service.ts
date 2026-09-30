@@ -1,14 +1,9 @@
-import { CapacitorHttp } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Injectable, inject } from '@angular/core';
 import { DiagnosticsService } from './diagnostics.service';
-import {
-  AUTH_PATH,
-  DELETE_CONCURRENCY,
-  MAX_PAGES,
-  PAGE_SIZE,
-  USER_AGENT,
-} from './endpoints';
+import { AUTH_PATH, DELETE_CONCURRENCY, MAX_PAGES, PAGE_SIZE } from './endpoints';
 import { normalizeHistoryItem } from './history';
+import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
 import { Session, SettingsService } from './settings.service';
 
@@ -39,8 +34,9 @@ function summarizeError(data: unknown): string {
 }
 
 /**
- * Cliente da Crunchyroll. Usa o HTTP nativo do Capacitor (sem CORS, IP residencial do
- * celular). No navegador de desenvolvimento cai para fetch e será barrado por CORS.
+ * Cliente da Crunchyroll. No APK, todas as chamadas saem de dentro de um WebView real com o
+ * site aberto (plugin PageFetch), único jeito de passar pelo Cloudflare. No navegador de
+ * desenvolvimento cai para fetch e será barrado por CORS.
  */
 @Injectable({ providedIn: 'root' })
 export class CrunchyrollService {
@@ -48,20 +44,45 @@ export class CrunchyrollService {
   private readonly diag = inject(DiagnosticsService);
 
   private refreshing: Promise<Session> | null = null;
+  private readonly native = Capacitor.isNativePlatform();
 
   get loggedIn(): boolean {
     return this.settings.session() !== null;
   }
 
-  async login(email: string, password: string): Promise<void> {
-    await this.requestToken({
-      grant_type: 'password',
-      username: email,
-      password,
-      scope: 'offline_access',
-      device_id: this.settings.deviceId,
-      device_name: 'CrunchySync',
-      device_type: 'Android',
+  /**
+   * Login no site real, dentro de um WebView em tela cheia. O usuário digita e-mail e senha
+   * na página da Crunchyroll (o app nunca os vê). Terminado o login, a sessão vem do cookie.
+   */
+  async login(): Promise<void> {
+    if (!this.native) throw new ApiError(0, 'O login só funciona no aplicativo instalado (APK).');
+    const base = this.settings.config().baseUrl;
+    await PageFetch.show({ url: `${base}/login` });
+    return new Promise<void>((resolve, reject) => {
+      let trying = false;
+      let finished = false;
+      const handles: { remove(): Promise<void> }[] = [];
+      const done = (err?: Error) => {
+        finished = true;
+        handles.forEach((h) => void h.remove());
+        err ? reject(err) : resolve();
+      };
+      void PageFetch.addListener('pageFinished', async ({ url }) => {
+        if (trying || finished || /\/(login|register|forgot|password)/.test(new URL(url).pathname)) return;
+        trying = true;
+        try {
+          await this.requestToken();
+          await PageFetch.hide();
+          done();
+        } catch {
+          /* ainda sem sessão: o usuário continua no login */
+        } finally {
+          trying = false;
+        }
+      }).then((h) => handles.push(h));
+      void PageFetch.addListener('closed', () => {
+        if (!finished) done(new Error('Login cancelado.'));
+      }).then((h) => handles.push(h));
     });
   }
 
@@ -124,51 +145,77 @@ export class CrunchyrollService {
   private async http(
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
-    opts: { headers?: Record<string, string>; params?: Record<string, string>; data?: unknown } = {},
+    opts: { headers?: Record<string, string>; params?: Record<string, string>; data?: string } = {},
   ) {
     const { baseUrl } = this.settings.config();
-    let res;
+    const url = new URL(baseUrl + path);
+    for (const [k, v] of Object.entries(opts.params ?? {})) url.searchParams.set(k, v);
+    let status: number;
+    let data: any;
     try {
-      res = await CapacitorHttp.request({
-        url: baseUrl + path,
-        method,
-        headers: { Accept: 'application/json', 'User-Agent': USER_AGENT, ...opts.headers },
-        params: opts.params,
-        data: opts.data,
-        connectTimeout: 15000,
-        readTimeout: 30000,
-      });
+      if (this.native) {
+        // Vai de dentro do WebView com a página da Crunchyroll aberta (passa pelo Cloudflare).
+        await PageFetch.ensureLoaded({ url: baseUrl + '/' });
+        const r = await PageFetch.fetch({
+          url: url.toString(),
+          method,
+          headers: { Accept: 'application/json', ...opts.headers },
+          body: opts.data,
+        });
+        if (r.error) throw new Error(r.error);
+        status = r.status ?? 0;
+        try {
+          data = r.body ? JSON.parse(r.body) : null;
+        } catch {
+          data = r.body ?? null;
+        }
+      } else {
+        const r = await CapacitorHttp.request({
+          url: url.toString(),
+          method,
+          headers: { Accept: 'application/json', ...opts.headers },
+          data: opts.data,
+          connectTimeout: 15000,
+          readTimeout: 30000,
+        });
+        status = r.status;
+        data = r.data;
+      }
     } catch (e) {
-      this.diag.log(`${method} ${path} -> FALHA DE REDE: ${(e as Error).message}`);
+      const code = (e as { code?: string }).code;
+      this.diag.log(`${method} ${path} -> FALHA: ${code ?? ''} ${(e as Error).message}`);
+      if (code === 'CHALLENGE') {
+        throw new ApiError(403, 'A Crunchyroll pediu uma verificação. Toque em "Entrar" para concluí-la.');
+      }
       throw new ApiError(0, 'Sem conexão com a Crunchyroll. Verifique sua internet.');
     }
-    const ok = res.status >= 200 && res.status < 300;
-    this.diag.log(`${method} ${path} -> ${res.status}${ok ? '' : ' ' + summarizeError(res.data)}`);
-    return { ok, status: res.status, data: res.data };
+    const ok = status >= 200 && status < 300;
+    this.diag.log(`${method} ${path} -> ${status}${ok ? '' : ' ' + summarizeError(data)}`);
+    return { ok, status, data };
   }
 
-  private async requestToken(form: Record<string, string>): Promise<Session> {
+  /** Troca o cookie de sessão do site (etp_rt_cookie) por um access_token. */
+  private async requestToken(): Promise<Session> {
+    const form = new URLSearchParams({
+      grant_type: 'etp_rt_cookie',
+      scope: 'offline_access',
+      device_id: this.settings.deviceId,
+      device_type: 'Chrome on Android',
+    });
     const res = await this.http('POST', AUTH_PATH, {
       headers: {
         Authorization: `Basic ${this.settings.config().basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      data: form,
+      data: form.toString(),
     });
     if (!res.ok) {
-      const bad = res.status === 400 || res.status === 401;
-      throw new ApiError(
-        res.status,
-        bad && form['grant_type'] === 'password'
-          ? 'E-mail ou senha incorretos (ou login bloqueado). Veja o Diagnóstico.'
-          : `Login recusado (${res.status}). Veja o Diagnóstico.`,
-      );
+      throw new ApiError(res.status, `Sessão não autorizada (${res.status}). Veja o Diagnóstico.`);
     }
     const d = res.data ?? {};
     if (!d.access_token) throw new ApiError(502, 'Resposta de login sem access_token.');
     const session: Session = {
       accessToken: d.access_token,
-      refreshToken: d.refresh_token ?? this.settings.session()?.refreshToken ?? '',
       expiresAt: Date.now() + (Number(d.expires_in) || 300) * 1000,
       accountId: d.account_id ?? this.settings.session()?.accountId ?? null,
     };
@@ -176,22 +223,13 @@ export class CrunchyrollService {
     return session;
   }
 
-  /** Renova o token; chamadas simultâneas compartilham a mesma renovação. */
+  /** Renova o token pelo cookie; chamadas simultâneas compartilham a mesma renovação. */
   private refresh(): Promise<Session> {
     this.refreshing ??= (async () => {
-      const current = this.settings.session();
-      if (!current?.refreshToken) throw new SessionExpiredError('Sessão expirada');
       try {
-        return await this.requestToken({
-          grant_type: 'refresh_token',
-          refresh_token: current.refreshToken,
-          scope: 'offline_access',
-          device_id: this.settings.deviceId,
-          device_name: 'CrunchySync',
-          device_type: 'Android',
-        });
+        return await this.requestToken();
       } catch (e) {
-        if (e instanceof ApiError && e.status >= 400 && e.status < 500) {
+        if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 403) {
           this.settings.setSession(null);
           throw new SessionExpiredError('Sessão expirada');
         }

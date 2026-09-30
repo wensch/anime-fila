@@ -28,5 +28,3 @@ export const AUTH_PATH = '/auth/v1/token';
 export const PAGE_SIZE = 100;
 export const MAX_PAGES = 200;
 export const DELETE_CONCURRENCY = 5;
-export const USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';

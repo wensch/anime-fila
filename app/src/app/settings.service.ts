@@ -3,7 +3,6 @@ import { ApiConfig, DEFAULT_CONFIG } from './endpoints';
 
 export interface Session {
   accessToken: string;
-  refreshToken: string;
   /** epoch ms */
   expiresAt: number;
   accountId: string | null;
@@ -35,7 +34,7 @@ function load(): Stored {
 
 /**
  * Guarda no aparelho a sessão (tokens) e a configuração da API.
- * A senha NUNCA é armazenada: só é usada no momento do login.
+ * A senha nunca passa pelo app: o login acontece na página da Crunchyroll.
  */
 @Injectable({ providedIn: 'root' })
 export class SettingsService {

@@ -4,14 +4,14 @@ App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem c
 
 - **Séries:** histórico agrupado por série (como no iOS), com remoção da série inteira num toque.
 - **Episódios:** lista completa, filtro por texto, intervalo de datas e número do episódio; seleção múltipla para remover episódios avulsos.
-- **Login no próprio app:** e-mail e senha vão direto do aparelho para a Crunchyroll. A senha não é armazenada; só a sessão (tokens), que é renovada automaticamente.
-- **Sem servidor:** as chamadas usam o HTTP nativo do Capacitor (sem CORS, com o IP do seu celular).
+- **Login na página oficial:** o app abre o site da Crunchyroll num WebView; você digita e-mail e senha lá (o app nunca os vê) e a sessão é renovada pelo cookie do site.
+- **Sem servidor:** todas as chamadas saem de dentro desse WebView (plugin Android `PageFetch`, em `app/android/.../PageFetchPlugin.java`), com o IP do seu celular. Isso é necessário porque o Cloudflare da Crunchyroll barra clientes HTTP comuns (erro 403 "Just a moment...").
 
 ## Instalar o APK (pelo celular)
 
 1. Abra a aba **Releases** do repositório no GitHub e entre em **CrunchySync (APK mais recente)**.
 2. Baixe `CrunchySync.apk` e abra o arquivo (o Android pedirá para permitir instalar de fontes desconhecidas).
-3. Abra o app e entre com sua conta.
+3. Abra o app, toque em **Entrar** e faça login na página da Crunchyroll (conclua a verificação, se aparecer).
 
 O APK é gerado pelo workflow `.github/workflows/apk.yml` a cada push em `main` ou `claude/**` (também dá para rodar manualmente em Actions > Build APK).
 
@@ -21,7 +21,7 @@ Sem configuração, o APK é assinado com uma chave de debug que muda a cada bui
 
 ## ⚠️ API não oficial e não verificada
 
-A Crunchyroll não tem API pública. O login (`/auth/v1/token`, cliente OAuth do site), a listagem (`/content/v2/{account}/watch-history`) e a exclusão (`DELETE .../watch-history/{id}`) foram escritos de memória e **nunca foram testados contra o serviço real** (os testes usam uma Crunchyroll simulada). Podem falhar no primeiro uso.
+A Crunchyroll não tem API pública. O token (`/auth/v1/token` com `grant_type=etp_rt_cookie`, cliente OAuth do site), a listagem (`/content/v2/{account}/watch-history`) e a exclusão (`DELETE .../watch-history/{id}`) foram escritos de memória e **nunca foram testados contra o serviço real** (os testes usam uma Crunchyroll simulada). Podem falhar no primeiro uso.
 
 Se falhar: toque em **Diagnóstico** no app. Ele lista cada chamada (método, caminho, status e erro; nunca senha ou token). Tire um print e use-o para corrigir. Os caminhos e o cliente OAuth também podem ser editados ali em *Configurações avançadas da API*, sem gerar novo APK. Todos os detalhes da API estão em `app/src/app/endpoints.ts`.
 
@@ -34,4 +34,4 @@ npm test                 # lógica de agrupamento e filtros (vitest)
 npx ng build && npx cap sync android
 ```
 
-No navegador (`npm start`) o login é barrado por CORS; use o APK. Angular 21 (o 22 exige Node ≥ 22.22.3), Tailwind 4, Capacitor 8.
+No navegador (`npm start`) o login não funciona (só existe no APK); a lógica de listas e filtros é coberta por `npm test`. Angular 21 (o 22 exige Node ≥ 22.22.3), Tailwind 4, Capacitor 8.

@@ -79,11 +79,11 @@ export class App {
 
   // ---- sessão ----
 
-  protected async login(email: string, password: string): Promise<void> {
+  protected async login(): Promise<void> {
     this.loginBusy.set(true);
     this.loginError.set(null);
     try {
-      await this.cr.login(email.trim(), password);
+      await this.cr.login();
       await this.refresh();
     } catch (e) {
       this.loginError.set(e instanceof Error ? e.message : 'Falha no login.');
