@@ -9,6 +9,7 @@ export interface Session {
 }
 
 const KEY = 'crunchysync.v2';
+const KEY_COVERS = 'crunchysync.covers';
 
 interface Stored {
   session: Session | null;
@@ -60,6 +61,23 @@ export class SettingsService {
   setConfig(config: ApiConfig): void {
     this.config.set(config);
     this.persist();
+  }
+
+  /** Cache seriesId -> URL da capa oficial (não é segredo; evita refazer as chamadas). */
+  loadCovers(): Record<string, string> {
+    try {
+      return JSON.parse(localStorage.getItem(KEY_COVERS) ?? '{}') ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  saveCovers(covers: Record<string, string>): void {
+    try {
+      localStorage.setItem(KEY_COVERS, JSON.stringify(covers));
+    } catch {
+      /* sem armazenamento: refaz na próxima abertura */
+    }
   }
 
   setMaxEpisodes(n: number): void {

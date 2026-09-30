@@ -2,7 +2,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Injectable, inject } from '@angular/core';
 import { DiagnosticsService } from './diagnostics.service';
 import { AUTH_PATH, DELETE_CONCURRENCY, PAGE_SIZE } from './endpoints';
-import { normalizeHistoryItem } from './history';
+import { extractSeriesCovers, normalizeHistoryItem } from './history';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
 import { Session, SettingsService } from './settings.service';
@@ -117,6 +117,25 @@ export class CrunchyrollService {
     }
     const episodes = [...byId.values()].slice(0, max);
     return episodes;
+  }
+
+  /** Capas oficiais das séries (em lotes de 20). Falhas não interrompem: devolve o que conseguir. */
+  async getSeriesCovers(seriesIds: string[]): Promise<Record<string, string>> {
+    const covers: Record<string, string> = {};
+    const tpl = this.settings.config().objectsPath;
+    const locale = this.settings.config().locale;
+    for (let i = 0; i < seriesIds.length; i += 20) {
+      const ids = seriesIds.slice(i, i + 20).map(encodeURIComponent).join(',');
+      try {
+        const body = await this.authed('GET', tpl.replace('{ids}', ids), { params: { locale } });
+        Object.assign(covers, extractSeriesCovers(body));
+      } catch (e) {
+        if (e instanceof SessionExpiredError) throw e;
+        this.diag.log(`capas: lote ${i / 20 + 1} falhou (${(e as Error).message})`);
+      }
+    }
+    this.diag.log(`capas: ${Object.keys(covers).length} de ${seriesIds.length} séries`);
+    return covers;
   }
 
   /** Apaga em lotes paralelos; falhas individuais não interrompem o resto. */

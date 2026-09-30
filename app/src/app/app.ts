@@ -54,7 +54,13 @@ export class App {
   protected readonly showAdvanced = signal(false);
   protected readonly copied = signal(false);
 
-  protected readonly allSeries = computed(() => groupBySeries(this.episodes()));
+  /** Capas oficiais por série (cache local + busca após carregar o histórico). */
+  protected readonly covers = signal<Record<string, string>>(this.settings.loadCovers());
+
+  protected readonly allSeries = computed(() => {
+    const covers = this.covers();
+    return groupBySeries(this.episodes()).map((s) => ({ ...s, coverUrl: covers[s.seriesId] ?? s.coverUrl }));
+  });
   protected readonly visibleSeries = computed(() =>
     filterSeries(this.allSeries(), this.filters(), this.sort()),
   );
@@ -109,10 +115,28 @@ export class App {
       this.episodes.set(await this.cr.listHistory(this.settings.maxEpisodes()));
       this.loaded.set(true);
       this.selected.set(new Set());
+      void this.loadCovers();
     } catch (e) {
       this.handleError(e);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  private async loadCovers(): Promise<void> {
+    const known = this.covers();
+    const missing = this.allSeries()
+      .map((s) => s.seriesId)
+      .filter((id) => !known[id]);
+    if (missing.length === 0) return;
+    try {
+      const found = await this.cr.getSeriesCovers(missing);
+      if (Object.keys(found).length === 0) return;
+      const merged = { ...this.covers(), ...found };
+      this.covers.set(merged);
+      this.settings.saveCovers(merged);
+    } catch (e) {
+      this.handleError(e);
     }
   }
 

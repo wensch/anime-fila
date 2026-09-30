@@ -26,12 +26,13 @@
       </button>
       @if (showAdvanced()) {
         <form class="mt-3 space-y-2 text-xs"
-          (submit)="$event.preventDefault(); saveConfig({ baseUrl: bu.value, basicAuth: ba.value, mePath: mp.value, historyPath: hp.value, deletePath: dp.value, locale: lc.value })">
+          (submit)="$event.preventDefault(); saveConfig({ baseUrl: bu.value, basicAuth: ba.value, mePath: mp.value, historyPath: hp.value, deletePath: dp.value, objectsPath: op.value, locale: lc.value })">
           <label class="block">URL base<input #bu class="field" [value]="settings.config().baseUrl" /></label>
           <label class="block">Cliente OAuth (base64)<input #ba class="field" [value]="settings.config().basicAuth" /></label>
           <label class="block">Caminho /me<input #mp class="field" [value]="settings.config().mePath" /></label>
           <label class="block">Caminho do histórico<input #hp class="field" [value]="settings.config().historyPath" /></label>
           <label class="block">Caminho de exclusão<input #dp class="field" [value]="settings.config().deletePath" /></label>
+          <label class="block">Caminho das capas de séries<input #op class="field" [value]="settings.config().objectsPath" /></label>
           <label class="block">Idioma<input #lc class="field" [value]="settings.config().locale" /></label>
           <div class="flex gap-2">
             <button type="submit" class="btn-primary">Salvar</button>

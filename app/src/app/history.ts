@@ -122,3 +122,28 @@ export function filterSeries(series: Series[], f: Filters, sort: SeriesSort): Se
   };
   return out.sort(by[sort]);
 }
+
+/**
+ * Capa oficial da série a partir de `images` do CMS: prefere poster_wide (16:9, como o card),
+ * depois poster_tall; entre os tamanhos, o menor com largura >= 640px (senão o maior).
+ */
+export function pickSeriesCover(images: any): string | null {
+  for (const key of ['poster_wide', 'poster_tall']) {
+    const flat: { width?: number; source?: string }[] = (images?.[key] ?? []).flat();
+    const valid = flat.filter((i) => i?.source);
+    if (valid.length === 0) continue;
+    const sorted = [...valid].sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
+    return (sorted.find((i) => (i.width ?? 0) >= 640) ?? sorted[sorted.length - 1]).source!;
+  }
+  return null;
+}
+
+/** Resposta de /cms/objects: itens do tipo série -> mapa seriesId -> URL da capa. */
+export function extractSeriesCovers(body: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const item of body?.data ?? []) {
+    const cover = item?.id ? pickSeriesCover(item.images) : null;
+    if (cover) out[item.id] = cover;
+  }
+  return out;
+}

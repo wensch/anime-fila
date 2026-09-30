@@ -11,6 +11,8 @@ export interface ApiConfig {
   mePath: string;
   historyPath: string;
   deletePath: string;
+  /** Metadados (com imagens) de séries; {ids} = ids separados por vírgula. */
+  objectsPath: string;
   locale: string;
 }
 
@@ -21,6 +23,7 @@ export const DEFAULT_CONFIG: ApiConfig = {
   mePath: '/accounts/v1/me',
   historyPath: '/content/v2/{account}/watch-history',
   deletePath: '/content/v2/{account}/watch-history/{id}',
+  objectsPath: '/content/v2/cms/objects/{ids}',
   locale: 'pt-BR',
 };
 

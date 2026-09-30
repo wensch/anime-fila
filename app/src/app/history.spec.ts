@@ -5,7 +5,9 @@ import {
   filterSeries,
   groupBySeries,
   normalizeHistoryItem,
+  extractSeriesCovers,
   pickLargestImage,
+  pickSeriesCover,
 } from './history';
 import { Episode } from './models';
 
@@ -90,5 +92,21 @@ describe('filtros', () => {
     expect(filterSeries(series, { ...EMPTY_FILTERS, to: '2026-01-31' }, 'recent').map((s) => s.seriesId)).toEqual(['A']);
     expect(filterSeries(series, EMPTY_FILTERS, 'title').map((s) => s.seriesId)).toEqual(['A', 'B']);
     expect(filterSeries(series, EMPTY_FILTERS, 'oldest').map((s) => s.seriesId)).toEqual(['A', 'B']);
+  });
+});
+
+describe('capas de série', () => {
+  const img = (w: number) => ({ width: w, source: `w${w}` });
+  it('prefere poster_wide e o menor tamanho >= 640', () => {
+    const images = { poster_wide: [[img(320), img(1920), img(800), img(640)]], poster_tall: [[img(1000)]] };
+    expect(pickSeriesCover(images)).toBe('w640');
+  });
+  it('cai para poster_tall e para o maior disponível', () => {
+    expect(pickSeriesCover({ poster_tall: [[img(200), img(400)]] })).toBe('w400');
+    expect(pickSeriesCover({})).toBeNull();
+  });
+  it('extrai mapa id -> capa ignorando itens sem imagem', () => {
+    const body = { data: [{ id: 'A', images: { poster_wide: [[img(800)]] } }, { id: 'B', images: {} }, { images: {} }] };
+    expect(extractSeriesCovers(body)).toEqual({ A: 'w800' });
   });
 });
