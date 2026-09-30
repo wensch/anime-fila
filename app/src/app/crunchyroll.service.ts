@@ -1,7 +1,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Injectable, inject } from '@angular/core';
 import { DiagnosticsService } from './diagnostics.service';
-import { AUTH_PATH, DELETE_CONCURRENCY, MAX_PAGES, PAGE_SIZE } from './endpoints';
+import { AUTH_PATH, DELETE_CONCURRENCY, MAX_EPISODES, MAX_PAGES, PAGE_SIZE } from './endpoints';
 import { normalizeHistoryItem } from './history';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
@@ -110,7 +110,8 @@ export class CrunchyrollService {
       );
       if (data.length === 0 || data.length < PAGE_SIZE) break;
       if (byId.size === before) break; // a API ignorou o número da página: evita laço
-      if (typeof total === 'number' && page * PAGE_SIZE >= total) break;
+      if (byId.size >= MAX_EPISODES) break;
+      // Não confia em `total`: só para quando a página vem incompleta, vazia ou repetida.
     }
     const episodes = [...byId.values()];
     return episodes;
