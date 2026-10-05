@@ -9,6 +9,7 @@ import { plural, relativeTime } from './text';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
 import {
+  ARCHIVE_MAX,
   ApiConfig,
   EPISODE_LIMITS,
   FULL_SCAN_LIMIT,
@@ -19,10 +20,13 @@ import {
   EMPTY_FILTERS,
   Filters,
   SeriesSort,
+  coverageGap,
+  coverageStart,
   episodesOfSeries,
   filterEpisodes,
   filterSeries,
   groupBySeries,
+  mergeArchive,
 } from './history';
 import { Episode } from './models';
 import { BackState, backAction } from './navigation';
@@ -41,9 +45,12 @@ interface Pending {
   seriesIds: string[];
   /** O histórico pode ter mais episódios antigos além da janela que a API entrega. */
   capped: boolean;
+  /** Episódios da série no catálogo que o histórico não lista (mais antigos que a janela). */
+  catalogIds: string[];
 }
 
 const PAGE = 100;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 @Component({
   selector: 'app-root',
@@ -62,6 +69,8 @@ export class App {
   protected readonly loggedIn = computed(() => this.settings.session() !== null);
   protected readonly episodes = signal<Episode[]>([]);
   protected readonly loaded = signal(false);
+  /** O histórico pode ter mais episódios do que o app consegue ver (limite escolhido ou da API). */
+  protected readonly mayHaveMore = signal(false);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
@@ -143,9 +152,13 @@ export class App {
       (this.tab() === 'episodes' && this.selected().size > 0) ||
       (this.tab() === 'series' && this.selectedSeries().size > 0),
   );
-  protected readonly limitReached = computed(
-    () => this.loaded() && this.episodes().length >= this.settings.maxEpisodes(),
+  /** Desde quando o app enxerga o histórico (data do episódio mais antigo que conhece). */
+  protected readonly coverageFrom = computed(() => coverageStart(this.episodes()));
+  /** Filtro pede algo mais antigo do que o app enxerga: série antiga não apareceria. */
+  protected readonly coverageGapAt = computed(() =>
+    coverageGap(this.episodes(), this.mayHaveMore(), this.filters()),
   );
+  protected readonly probing = signal(false);
   protected readonly hasFilters = computed(() => {
     const f = this.filters();
     return !!(
@@ -170,7 +183,11 @@ export class App {
         ? `${what} de ${plural(p.seriesCount, 'série', 'séries')} ${verb} do histórico.`
         : `${what} ${verb} do histórico.`;
     if (p.extra > 0) text += ` Inclui ${p.extra} que não estavam na lista carregada.`;
-    if (p.capped) text += ' Se houver mais antigos, o app repete a remoção até acabar.';
+    if (p.catalogIds.length > 0) {
+      text += ` A Crunchyroll mostra só os episódios mais recentes do histórico; por isso o app também limpa pelo catálogo até ${plural(p.catalogIds.length, 'episódio mais antigo', 'episódios mais antigos')} dessas séries.`;
+    } else if (p.capped) {
+      text += ' Se houver mais antigos, o app repete a remoção até acabar.';
+    }
     return text;
   });
 
@@ -258,7 +275,10 @@ export class App {
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.episodes.set(await this.cr.listHistory(this.settings.maxEpisodes()));
+      const scan = await this.cr.scanHistory(this.settings.maxEpisodes());
+      // O que saiu da janela da API continua guardado no aparelho (histórico acumulado).
+      this.episodes.set(mergeArchive(scan.episodes, this.episodes(), scan.capped, ARCHIVE_MAX));
+      this.mayHaveMore.set(scan.capped);
       this.settings.saveHistoryCache(this.episodes());
       this.loaded.set(true);
       this.selected.set(new Set());
@@ -308,7 +328,16 @@ export class App {
     try {
       const { episodes: all, capped } = await this.cr.scanHistory(FULL_SCAN_LIMIT);
       const episodes = episodesOfSeries(all, seriesIds);
-      if (episodes.length === 0) {
+      // Se a API não entregou o histórico inteiro, os episódios mais antigos das séries podem
+      // estar fora da lista: pega os IDs pelo catálogo para apagá-los também.
+      let catalogIds: string[] = [];
+      if (capped) {
+        const known = new Set(episodes.map((e) => e.episodeId));
+        const fromCatalog: string[] = [];
+        for (const id of seriesIds) fromCatalog.push(...(await this.cr.getCatalogEpisodeIds(id)));
+        catalogIds = [...new Set(fromCatalog)].filter((id) => !known.has(id));
+      }
+      if (episodes.length === 0 && catalogIds.length === 0) {
         this.notice.set('Nada a remover: essas séries já não estão no histórico.');
         return;
       }
@@ -321,6 +350,7 @@ export class App {
         extra,
         seriesIds: [...seriesIds],
         capped,
+        catalogIds,
       });
     } catch (e) {
       this.handleError(e);
@@ -344,6 +374,7 @@ export class App {
       extra: 0,
       seriesIds: [],
       capped: false,
+      catalogIds: [],
     });
   }
 
@@ -361,11 +392,15 @@ export class App {
     this.removing.set(true);
     this.cancelRequested.set(false);
     this.error.set(null);
-    const deletedAll = new Set<string>();
-    let requested = p.episodes.length;
+    const deletedAll = new Set<string>(); // a Crunchyroll confirmou (204)
+    const goneAll = new Set<string>(); // saíram do histórico (204) ou já não existiam (404)
     let failedCount = 0;
     let cancelled = false;
-    let batch = p.episodes.map((e) => e.episodeId);
+    let leftover = 0; // ainda listados no histórico depois de apagar
+    let verified = p.kind !== 'series';
+    let batch = [...p.episodes.map((e) => e.episodeId), ...p.catalogIds];
+    const attempted = new Set(batch);
+    let stillListed = new Set<string>();
     try {
       for (let round = 1; ; round++) {
         this.removePhase.set('Removendo…');
@@ -374,39 +409,59 @@ export class App {
           onProgress: (done, total) => this.removeProgress.set({ done, total }),
           isCancelled: () => this.cancelRequested(),
         });
-        out.deleted.forEach((id) => deletedAll.add(id));
+        out.deleted.forEach((id) => {
+          deletedAll.add(id);
+          goneAll.add(id);
+        });
+        out.missing?.forEach((id) => goneAll.add(id));
         failedCount += out.failed.length;
         cancelled = !!out.cancelled;
         if (out.expired) throw new SessionExpiredError('Sessão expirada'); // o `finally` ainda reflete o que foi apagado
-        // A API só mostra os ~1000 episódios mais recentes: depois de apagar, os mais antigos
-        // dessas séries "sobem" para dentro da janela. Confere de novo e apaga o que restou.
-        if (p.kind !== 'series' || !p.capped || cancelled) break;
-        if (out.deleted.length === 0 || round >= MAX_REMOVE_ROUNDS) break;
+        if (p.kind !== 'series' || cancelled) break;
+        // Confere o resultado de verdade: a Crunchyroll pode demorar a refletir e, depois de
+        // apagar os recentes, os mais antigos das séries "sobem" para dentro da janela da API.
         this.removeProgress.set(null);
-        this.removePhase.set('Procurando episódios mais antigos dessas séries…');
-        const again = await this.cr.scanHistory(FULL_SCAN_LIMIT);
-        const more = episodesOfSeries(again.episodes, p.seriesIds).filter(
-          (e) => !deletedAll.has(e.episodeId),
-        );
-        if (more.length === 0) break;
-        batch = more.map((e) => e.episodeId);
-        requested += batch.length;
+        this.removePhase.set('Conferindo se tudo saiu do histórico…');
+        await sleep(1500);
+        let again;
+        try {
+          again = await this.cr.scanHistory(FULL_SCAN_LIMIT);
+        } catch (e) {
+          if (e instanceof SessionExpiredError) throw e;
+          break; // não deu para conferir; o aviso final diz isso
+        }
+        verified = true;
+        const listed = episodesOfSeries(again.episodes, p.seriesIds);
+        stillListed = new Set(listed.map((e) => e.episodeId));
+        leftover = listed.length;
+        const fresh = listed.filter((e) => !attempted.has(e.episodeId));
+        if (fresh.length === 0 || round >= MAX_REMOVE_ROUNDS) break;
+        batch = fresh.map((e) => e.episodeId);
+        batch.forEach((id) => attempted.add(id));
       }
+      const n = deletedAll.size;
       this.notice.set(
         cancelled
-          ? `Cancelado: ${deletedAll.size} de ${requested} episódios foram removidos.`
+          ? `Cancelado: ${plural(n, 'episódio removido', 'episódios removidos')}.`
           : failedCount
-            ? `${deletedAll.size} de ${requested} removidos; ${failedCount} falharam. Veja o Diagnóstico.`
-            : `${plural(deletedAll.size, 'episódio removido', 'episódios removidos')}.`,
+            ? `${n} removidos; ${failedCount} falharam. Veja o Diagnóstico.`
+            : leftover > 0
+              ? `${n} removidos, mas ${leftover} ainda aparecem no histórico da Crunchyroll. Atualize daqui a pouco; se continuar, abra o Diagnóstico.`
+              : n === 0
+                ? 'Esses episódios já não estavam no histórico.'
+                : p.kind === 'series' && verified
+                  ? `${plural(n, 'episódio removido', 'episódios removidos')}. Conferido: nada restou dessas séries no histórico.`
+                  : `${plural(n, 'episódio removido', 'episódios removidos')}.`,
       );
     } catch (e) {
       this.handleError(e);
     } finally {
-      // Reflete na tela o que foi apagado, mesmo se algo falhou no meio.
-      if (deletedAll.size > 0) {
-        this.episodes.update((list) => list.filter((e) => !deletedAll.has(e.episodeId)));
+      // Reflete na tela o que saiu do histórico, mesmo se algo falhou no meio.
+      stillListed.forEach((id) => goneAll.delete(id)); // a Crunchyroll ainda lista: continua visível
+      if (goneAll.size > 0) {
+        this.episodes.update((list) => list.filter((e) => !goneAll.has(e.episodeId)));
         this.settings.saveHistoryCache(this.episodes());
-        this.selected.update((s) => new Set([...s].filter((id) => !deletedAll.has(id))));
+        this.selected.update((s) => new Set([...s].filter((id) => !goneAll.has(id))));
         const alive = new Set(this.allSeries().map((s) => s.seriesId));
         this.selectedSeries.update((s) => new Set([...s].filter((id) => alive.has(id))));
       }
@@ -414,6 +469,25 @@ export class App {
       this.removing.set(false);
       this.removeProgress.set(null);
       this.pending.set(null);
+    }
+  }
+
+  /** Sonda de leitura: registra no Diagnóstico a forma das respostas de endpoints candidatos. */
+  protected async probeApi(): Promise<void> {
+    if (this.probing()) return;
+    this.probing.set(true);
+    try {
+      const first = this.episodes()[0];
+      await this.cr.probeApi({
+        episodeIds: this.episodes()
+          .slice(0, 3)
+          .map((e) => e.episodeId),
+        seriesId: first?.seriesId ?? null,
+      });
+    } catch (e) {
+      this.handleError(e);
+    } finally {
+      this.probing.set(false);
     }
   }
 
@@ -622,7 +696,7 @@ export class App {
 
   // ---- configuração e diagnóstico ----
 
-  protected saveConfig(values: Record<keyof ApiConfig, string>): void {
+  protected saveConfig(values: Partial<Record<keyof ApiConfig, string>>): void {
     this.settings.setConfig({ ...this.settings.config(), ...values });
     this.notice.set('Configurações salvas.');
   }

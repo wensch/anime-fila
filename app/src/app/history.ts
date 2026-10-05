@@ -87,7 +87,7 @@ export const EMPTY_FILTERS: Filters = {
 };
 
 /** Instante (ms) de N meses atrás; itens com data anterior a ele são "antigos". */
-function staleCutoff(now: number, months: number | null): number {
+export function staleCutoff(now: number, months: number | null): number {
   if (months === null) return Infinity;
   const d = new Date(now);
   d.setMonth(d.getMonth() - months);
@@ -194,4 +194,67 @@ export function extractSeriesCovers(body: any): Record<string, string> {
 export function episodesOfSeries(episodes: Episode[], seriesIds: Iterable<string>): Episode[] {
   const ids = new Set(seriesIds);
   return episodes.filter((e) => ids.has(e.seriesId));
+}
+
+/** Data (ms) do episódio mais antigo que o app conhece; null se não há nenhum com data. */
+export function coverageStart(episodes: Episode[]): number | null {
+  let oldest: number | null = null;
+  for (const e of episodes) {
+    const t = time(e.watchedAt);
+    if (t !== 0 && (oldest === null || t < oldest)) oldest = t;
+  }
+  return oldest;
+}
+
+/**
+ * O app só enxerga o histórico até certa data (a Crunchyroll entrega uma janela dos episódios
+ * mais recentes). Se o filtro pede algo mais antigo que isso, devolve a data (ms) até onde o app
+ * enxerga, para avisar que séries mais antigas não aparecem. null = sem problema.
+ */
+export function coverageGap(
+  episodes: Episode[],
+  mayHaveMore: boolean,
+  f: Filters,
+  now = Date.now(),
+): number | null {
+  if (!mayHaveMore) return null;
+  const start = coverageStart(episodes);
+  if (start === null) return null;
+  const wanted: number[] = [];
+  if (f.olderThanMonths !== null) wanted.push(staleCutoff(now, f.olderThanMonths));
+  const [lo] = dayBounds(f);
+  if (lo !== -Infinity) wanted.push(lo);
+  return wanted.some((w) => w < start) ? start : null;
+}
+
+/**
+ * Junta o que a Crunchyroll devolveu agora (`fresh`) com o que o app já tinha guardado
+ * (`archive`). A API só entrega os episódios mais recentes: os que saíram dessa janela continuam
+ * guardados. Um guardado que é mais novo que o mais antigo do resultado atual e não veio nele foi
+ * apagado em outro lugar e some. Sem `mayHaveMore`, o resultado atual é o histórico inteiro.
+ */
+export function mergeArchive(
+  fresh: Episode[],
+  archive: Episode[],
+  mayHaveMore: boolean,
+  limit: number,
+): Episode[] {
+  if (!mayHaveMore) return fresh;
+  const have = new Set(fresh.map((e) => e.episodeId));
+  const oldest = coverageStart(fresh) ?? Infinity;
+  const kept = archive.filter(
+    (e) => !have.has(e.episodeId) && time(e.watchedAt) !== 0 && time(e.watchedAt) < oldest,
+  );
+  const all = [...fresh, ...kept].sort((a, b) => time(b.watchedAt) - time(a.watchedAt));
+  return all.slice(0, limit);
+}
+
+/** Versão enxuta para guardar no aparelho: a miniatura só no episódio mais recente de cada série. */
+export function slimForStorage(episodes: Episode[]): Episode[] {
+  const seen = new Set<string>();
+  return episodes.map((e) => {
+    if (seen.has(e.seriesId)) return e.coverUrl === null ? e : { ...e, coverUrl: null };
+    seen.add(e.seriesId);
+    return e;
+  });
 }

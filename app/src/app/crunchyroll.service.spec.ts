@@ -127,7 +127,7 @@ describe('autenticação e tentativas', () => {
 });
 
 describe('deleteEpisodes', () => {
-  it('reporta progresso e separa sucessos de falhas', async () => {
+  it('reporta progresso e trata 404 como "já não existia"', async () => {
     const { cr } = setup();
     request.mockImplementation(async (opts: { url: string }) =>
       new URL(opts.url).pathname.endsWith('/bad') ? ok({}, 404) : ok(null, 204),
@@ -136,7 +136,8 @@ describe('deleteEpisodes', () => {
     const ids = ['a', 'b', 'c', 'bad', 'd', 'e', 'f'];
     const out = await cr.deleteEpisodes(ids, { onProgress: (d) => progress.push(d) });
     expect(out.deleted).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
-    expect(out.failed.map((f) => f.id)).toEqual(['bad']);
+    expect(out.missing).toEqual(['bad']); // 404: já não estava no histórico
+    expect(out.failed).toEqual([]);
     expect(progress[0]).toBe(0);
     expect(progress.at(-1)).toBe(7);
     expect(request.mock.calls.every((c) => method(c) === 'DELETE')).toBe(true);
@@ -227,5 +228,77 @@ describe('correções da revisão', () => {
     const again = new SettingsService();
     expect(again.config().locale).toBe('en-US');
     expect(again.config().historyPath).toBe(DEFAULT_CONFIG.historyPath);
+  });
+});
+
+describe('janela maior e catálogo', () => {
+  const full = (prefix: string, n = 100) =>
+    Array.from({ length: n }, (_, i) => item(`${prefix}${i}`));
+  const sizeOf = (call: unknown[]) =>
+    new URL((call[0] as { url: string }).url).searchParams.get('page_size');
+
+  it('tenta página grande primeiro e a usa se a API aceitar', async () => {
+    const { cr } = setup();
+    request
+      .mockResolvedValueOnce(ok({ data: full('a', 500) }))
+      .mockResolvedValueOnce(ok({ data: full('b', 200) }));
+    const r = await cr.scanHistory(1000);
+    expect(sizeOf(request.mock.calls[0])).toBe('500');
+    expect(r.episodes).toHaveLength(700);
+    expect(r.capped).toBe(false);
+  });
+
+  it('se a API limita a 100, segue com páginas de 100 sem perder nada', async () => {
+    const { cr } = setup();
+    request
+      .mockResolvedValueOnce(ok({ data: full('a') })) // pediu 500, veio 100
+      .mockResolvedValueOnce(ok({ data: full('b') }))
+      .mockResolvedValueOnce(ok({ data: full('c', 30) }));
+    const r = await cr.scanHistory(1000);
+    expect(r.episodes).toHaveLength(230);
+    expect(sizeOf(request.mock.calls[1])).toBe('100');
+  });
+
+  it('página grande recusada (400) volta para 100 e lembra', async () => {
+    const { cr } = setup();
+    request
+      .mockResolvedValueOnce(ok({ error: 'format_validation_error' }, 400))
+      .mockResolvedValueOnce(ok({ data: full('a', 40) }));
+    const r = await cr.scanHistory(1000);
+    expect(r.episodes).toHaveLength(40);
+    expect(sizeOf(request.mock.calls[1])).toBe('100');
+    request.mockResolvedValueOnce(ok({ data: full('z', 5) }));
+    await cr.scanHistory(1000);
+    expect(sizeOf(request.mock.calls[2])).toBe('100'); // não tenta de novo
+  });
+
+  it('getCatalogEpisodeIds junta episódios e versões dubladas de todas as temporadas', async () => {
+    const { cr } = setup();
+    request.mockImplementation(async (opts: { url: string }) => {
+      const p = new URL(opts.url).pathname;
+      if (p.endsWith('/series/S1/seasons')) return ok({ data: [{ id: 'T1' }, { id: 'T2' }] });
+      if (p.endsWith('/seasons/T1/episodes')) {
+        return ok({ data: [{ id: 'e1', versions: [{ guid: 'e1-dub' }] }, { id: 'e2' }] });
+      }
+      if (p.endsWith('/seasons/T2/episodes')) return ok({ data: [{ id: 'e3' }] });
+      return ok({}, 404);
+    });
+    expect((await cr.getCatalogEpisodeIds('S1')).sort()).toEqual(['e1', 'e1-dub', 'e2', 'e3']);
+  });
+
+  it('catálogo que falha devolve o que tem, sem lançar', async () => {
+    const { cr } = setup();
+    request.mockResolvedValue(ok({}, 404));
+    expect(await cr.getCatalogEpisodeIds('S1')).toEqual([]);
+  });
+
+  it('a sonda só faz GET e registra a forma, não valores', async () => {
+    const { cr } = setup();
+    request.mockResolvedValue(ok({ total: 3, data: [{ secret: 'valor-pessoal' }] }));
+    await cr.probeApi({ episodeIds: ['e1'], seriesId: 'S1' });
+    expect(request.mock.calls.every((c) => method(c) === 'GET')).toBe(true);
+    const log = (cr as any).diag.asText() as string;
+    expect(log).toContain('SONDA fila (watchlist)');
+    expect(log).not.toContain('valor-pessoal');
   });
 });

@@ -20,6 +20,8 @@ export interface Series {
 
 export interface DeleteOutcome {
   deleted: string[];
+  /** Já não existiam no histórico (404): contam como removidos. */
+  missing?: string[];
   failed: { id: string; error: string }[];
   /** true se o usuário cancelou antes de terminar. */
   cancelled?: boolean;

@@ -3,8 +3,10 @@
 App Android (APK) para gerenciar o histórico da Crunchyroll pelo celular, sem computador:
 
 - **Séries:** histórico agrupado por série (como no iOS), com remoção da série inteira num toque.
-- **Remoção em massa:** marque várias séries e remova de uma vez; o app confere o histórico completo antes (inclusive episódios além do limite "Carregar até") e, se houver mais antigos além da janela de 1000, repete a remoção até acabar; mostra o progresso e permite cancelar.
-- **Filtros:** texto, datas, ordenação e "sem assistir há mais de N meses" para achar o que está abandonado; "Carregar até" vai de 100 a 1000 (a API da Crunchyroll só entrega os 1000 episódios mais recentes; a página 11 dá erro 400).
+- **Remoção em massa:** marque várias séries e remova de uma vez. Como a API do histórico só entrega os episódios mais recentes, o app também pega os IDs de todos os episódios da série no catálogo (temporadas, episódios e versões dubladas) e apaga os mais antigos que o histórico não lista; depois **confere de novo** o histórico e avisa se algo ainda aparece. Mostra o progresso e permite cancelar.
+- **Filtros:** texto, datas (da última vez assistida, nas séries), ordenação e "sem assistir há mais de N meses". O painel mostra desde quando o app enxerga o histórico e avisa quando o filtro pede algo mais antigo que isso.
+- **Alcance do histórico:** "Carregar até" vai de 100 a 5000. O app tenta páginas grandes e, se a API recusar, volta às de 100; o que sai da janela da Crunchyroll continua guardado no aparelho (histórico acumulado), então o alcance cresce com o uso.
+- **Diagnóstico → Investigar a API:** sonda só de leitura que registra a *forma* (campos e tipos, nunca valores) das respostas de endpoints candidatos (Fila/watchlist, progresso, metadados e catálogo); serve para evoluir o app.
 - **Navegação:** o botão Voltar do Android fecha painéis e menus, sai da seleção e volta de Episódios para Séries antes de sair do app; cada aba tem seus filtros; abas e busca ficam fixas ao rolar; alvos de toque de 48 px.
 - **Capas no aparelho:** as capas das séries são salvas no armazenamento do celular e abrem na hora, sem baixar de novo; as abas ficam montadas, então trocar de aba não recarrega nada.
 - **Seleção rápida:** segure a capa de uma série para começar a selecionar (já marcando aquela); as datas dos cards são relativas ("há 2 dias", o dia exato fica no toque longo do texto no navegador).

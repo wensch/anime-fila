@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_FILTERS,
+  coverageGap,
+  coverageStart,
   filterEpisodes,
   filterSeries,
   groupBySeries,
+  mergeArchive,
   normalizeHistoryItem,
+  slimForStorage,
   episodesOfSeries,
   extractSeriesCovers,
   pickLargestImage,
@@ -194,5 +198,98 @@ describe('filtro exato por série', () => {
     const out = filterEpisodes(eps, { ...EMPTY_FILTERS, seriesId: 'A' });
     expect(out.map((e) => e.episodeId)).toEqual(['3', '1']);
     expect(filterEpisodes(eps, { ...EMPTY_FILTERS, query: 'Naruto' })).toHaveLength(2);
+  });
+});
+
+describe('filtro de datas (dia local, limites inclusivos)', () => {
+  // Datas montadas no fuso local, para o teste valer em qualquer fuso do aparelho.
+  const at = (y: number, m: number, d: number, h: number, min = 0) =>
+    new Date(y, m - 1, d, h, min).toISOString();
+  const eps = [
+    ep('antes', 'A', at(2026, 3, 9, 23, 59)),
+    ep('inicio', 'B', at(2026, 3, 10, 0, 0)),
+    ep('meio', 'C', at(2026, 3, 15, 12)),
+    ep('fim', 'D', at(2026, 3, 20, 23, 59)),
+    ep('depois', 'E', at(2026, 3, 21, 0, 0)),
+    ep('semdata', 'F', null),
+  ];
+  const ids = (f: Partial<typeof EMPTY_FILTERS>) =>
+    filterEpisodes(eps, { ...EMPTY_FILTERS, ...f }).map((e) => e.episodeId);
+
+  it('"de" e "até" incluem o próprio dia, do primeiro ao último minuto', () => {
+    expect(ids({ from: '2026-03-10', to: '2026-03-20' })).toEqual(['fim', 'meio', 'inicio']);
+  });
+  it('só "de" ou só "até"', () => {
+    expect(ids({ from: '2026-03-20' })).toEqual(['depois', 'fim']);
+    expect(ids({ to: '2026-03-10' })).toEqual(['inicio', 'antes']);
+  });
+  it('um único dia (de = até)', () => {
+    expect(ids({ from: '2026-03-15', to: '2026-03-15' })).toEqual(['meio']);
+  });
+  it('sem data nunca entra quando há filtro de data; sem filtro, entra', () => {
+    expect(ids({ from: '2000-01-01' })).not.toContain('semdata');
+    expect(ids({})).toContain('semdata');
+  });
+  it('valor inválido é ignorado', () => {
+    expect(ids({ from: 'abc', to: '' })).toHaveLength(6);
+  });
+  it('séries: filtra pela última vez assistida', () => {
+    const series = groupBySeries([
+      ep('1', 'X', at(2026, 3, 1, 10)),
+      ep('2', 'X', at(2026, 3, 18, 10)),
+      ep('3', 'Y', at(2026, 3, 5, 10)),
+    ]);
+    const out = filterSeries(series, { ...EMPTY_FILTERS, from: '2026-03-10' }, 'recent');
+    expect(out.map((x) => x.seriesId)).toEqual(['X']); // X foi vista de novo dia 18; Y parou dia 5
+  });
+});
+
+describe('cobertura do histórico', () => {
+  const now = Date.parse('2026-09-30T12:00:00Z');
+  const eps = [ep('a', 'A', '2026-09-01T00:00:00Z'), ep('b', 'B', '2026-04-10T00:00:00Z')];
+  it('começa no episódio mais antigo com data', () => {
+    expect(coverageStart(eps)).toBe(Date.parse('2026-04-10T00:00:00Z'));
+    expect(coverageStart([ep('x', 'X', null)])).toBeNull();
+  });
+  it('avisa só quando o filtro pede algo além do que se enxerga', () => {
+    const f6 = { ...EMPTY_FILTERS, olderThanMonths: 6 }; // corte em 30/03: antes de 10/04
+    expect(coverageGap(eps, true, f6, now)).toBe(Date.parse('2026-04-10T00:00:00Z'));
+    expect(coverageGap(eps, false, f6, now)).toBeNull(); // histórico completo: sem aviso
+    expect(coverageGap(eps, true, { ...EMPTY_FILTERS, olderThanMonths: 3 }, now)).toBeNull();
+    expect(coverageGap(eps, true, { ...EMPTY_FILTERS, from: '2026-01-01' }, now)).not.toBeNull();
+    expect(coverageGap(eps, true, { ...EMPTY_FILTERS, from: '2026-08-01' }, now)).toBeNull();
+  });
+});
+
+describe('histórico acumulado (mergeArchive)', () => {
+  const fresh = [ep('n2', 'A', '2026-09-20T00:00:00Z'), ep('n1', 'A', '2026-09-10T00:00:00Z')];
+  const archive = [
+    ep('n2', 'A', '2026-09-20T00:00:00Z'),
+    ep('apagado', 'B', '2026-09-15T00:00:00Z'), // mais novo que o mais antigo atual e sumiu: apagado fora
+    ep('velho1', 'C', '2026-08-01T00:00:00Z'), // além da janela: continua guardado
+    ep('velho2', 'C', '2026-07-01T00:00:00Z'),
+    ep('semdata', 'D', null),
+  ];
+  it('sem mayHaveMore o resultado atual é o histórico inteiro', () => {
+    expect(mergeArchive(fresh, archive, false, 100)).toEqual(fresh);
+  });
+  it('guarda o que saiu da janela e descarta o que foi apagado em outro lugar', () => {
+    const out = mergeArchive(fresh, archive, true, 100).map((e) => e.episodeId);
+    expect(out).toEqual(['n2', 'n1', 'velho1', 'velho2']);
+  });
+  it('respeita o limite, mantendo os mais recentes', () => {
+    expect(mergeArchive(fresh, archive, true, 3).map((e) => e.episodeId)).toEqual([
+      'n2',
+      'n1',
+      'velho1',
+    ]);
+  });
+});
+
+describe('slimForStorage', () => {
+  it('mantém a miniatura só no primeiro episódio de cada série', () => {
+    const e = (id: string, sid: string) => ({ ...ep(id, sid, null), coverUrl: 'http://x/' + id });
+    const out = slimForStorage([e('1', 'A'), e('2', 'A'), e('3', 'B')]);
+    expect(out.map((x) => x.coverUrl)).toEqual(['http://x/1', null, 'http://x/3']);
   });
 });

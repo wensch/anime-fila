@@ -1,11 +1,19 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Injectable, inject } from '@angular/core';
 import { DiagnosticsService } from './diagnostics.service';
-import { AUTH_PATH, DELETE_CONCURRENCY, MAX_RETRIES, PAGE_SIZE } from './endpoints';
+import {
+  AUTH_PATH,
+  BIG_PAGE_SIZE,
+  DELETE_CONCURRENCY,
+  MAX_CATALOG_IDS,
+  MAX_RETRIES,
+  PAGE_SIZE,
+} from './endpoints';
 import { extractSeriesCovers, normalizeHistoryItem } from './history';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
 import { Session, SettingsService } from './settings.service';
+import { shapeOf } from './shape';
 
 export class ApiError extends Error {
   constructor(
@@ -48,6 +56,8 @@ export class CrunchyrollService {
   private readonly diag = inject(DiagnosticsService);
 
   private refreshing: Promise<Session> | null = null;
+  /** A API aceita páginas maiores que 100? undefined = ainda não sabemos. */
+  private bigPages: boolean | undefined;
   private readonly native = Capacitor.isNativePlatform();
 
   get loggedIn(): boolean {
@@ -130,6 +140,9 @@ export class CrunchyrollService {
     const path = fill(this.settings.config().historyPath, { account: accountId });
     const byId = new Map<string, Episode>();
     const maxPages = Math.ceil(max / PAGE_SIZE) + 2; // folga para páginas com repetidos
+    // Tenta páginas grandes (menos chamadas e, quem sabe, janela maior); se a API recusar ou
+    // limitar a 100, volta às páginas de 100 e lembra disso.
+    let pageSize = max > PAGE_SIZE && this.bigPages !== false ? BIG_PAGE_SIZE : PAGE_SIZE;
     let capped = false;
     for (let page = 1; page <= maxPages; page++) {
       let body: any;
@@ -137,31 +150,45 @@ export class CrunchyrollService {
         body = await this.authed('GET', path, {
           params: {
             page: String(page),
-            page_size: String(PAGE_SIZE),
+            page_size: String(pageSize),
             locale: this.settings.config().locale,
           },
         });
       } catch (e) {
-        // A API só entrega uma janela fixa (as ~1000 mais recentes): página além dela = 400.
-        if (e instanceof ApiError && e.status === 400 && page > 1) {
-          this.diag.log(
-            `histórico: a API recusou a página ${page}; usando as ${byId.size} já lidas`,
-          );
-          capped = true;
-          break;
+        if (e instanceof ApiError && e.status === 400) {
+          if (page === 1 && pageSize !== PAGE_SIZE) {
+            this.bigPages = false;
+            this.diag.log(`histórico: página de ${pageSize} recusada; voltando para ${PAGE_SIZE}`);
+            pageSize = PAGE_SIZE;
+            page--; // repete a primeira página
+            continue;
+          }
+          // A API só entrega uma janela fixa dos mais recentes: página além dela = 400.
+          if (page > 1) {
+            this.diag.log(
+              `histórico: a API recusou a página ${page}; usando as ${byId.size} já lidas`,
+            );
+            capped = true;
+            break;
+          }
         }
         throw e;
       }
       const data: any[] = body?.data ?? [];
+      if (page === 1 && pageSize !== PAGE_SIZE) {
+        // Se veio mais de 100, a API respeita páginas grandes; senão ela limitou a 100.
+        this.bigPages = data.length > PAGE_SIZE;
+        if (!this.bigPages) pageSize = PAGE_SIZE;
+      }
       const before = byId.size;
       for (const raw of data) {
         const ep = normalizeHistoryItem(raw);
         if (ep) byId.set(ep.episodeId, ep);
       }
       this.diag.log(
-        `histórico p.${page}: ${data.length} itens, ${byId.size - before} novos, total=${body?.total ?? '?'}`,
+        `histórico p.${page} (tam. ${pageSize}): ${data.length} itens, ${byId.size - before} novos, total=${body?.total ?? '?'}`,
       );
-      if (data.length === 0 || data.length < PAGE_SIZE) break;
+      if (data.length === 0 || data.length < pageSize) break;
       if (byId.size === before) break; // a API ignorou o número da página: evita laço
       if (byId.size >= max) {
         capped = true;
@@ -169,6 +196,89 @@ export class CrunchyrollService {
       }
     }
     return { episodes: [...byId.values()].slice(0, max), capped };
+  }
+
+  /**
+   * IDs de todos os episódios de uma série pelo catálogo (temporadas -> episódios, com as versões
+   * dubladas). Serve para apagar o que o histórico não lista por estar além da janela da API.
+   * Falhas não interrompem: devolve o que conseguiu.
+   */
+  async getCatalogEpisodeIds(seriesId: string): Promise<string[]> {
+    const cfg = this.settings.config();
+    const ids = new Set<string>();
+    try {
+      const seasons: any = await this.authed('GET', fill(cfg.seasonsPath, { id: seriesId }), {
+        params: { locale: cfg.locale },
+      });
+      for (const season of seasons?.data ?? []) {
+        if (!season?.id || ids.size >= MAX_CATALOG_IDS) continue;
+        const eps: any = await this.authed('GET', fill(cfg.episodesPath, { id: season.id }), {
+          params: { locale: cfg.locale },
+        });
+        for (const ep of eps?.data ?? []) {
+          if (ep?.id) ids.add(ep.id);
+          for (const v of ep?.versions ?? []) if (v?.guid) ids.add(v.guid);
+        }
+      }
+    } catch (e) {
+      if (e instanceof SessionExpiredError) throw e;
+      this.diag.log(`catálogo da série: falhou (${(e as Error).message})`);
+    }
+    this.diag.log(`catálogo: ${ids.size} episódios (incl. versões) para a série`);
+    return [...ids].slice(0, MAX_CATALOG_IDS);
+  }
+
+  /**
+   * Sonda SOMENTE LEITURA: pede a vários endpoints candidatos e registra no Diagnóstico a forma
+   * das respostas (campos e tipos, nunca valores). Serve para descobrir como é a "Fila" da
+   * Crunchyroll, qual o limite real do histórico e quais metadados existem (gêneros etc.).
+   */
+  async probeApi(sample: { episodeIds: string[]; seriesId: string | null }): Promise<void> {
+    const acc = await this.accountId();
+    const locale = this.settings.config().locale;
+    const run = async (label: string, path: string, params: Record<string, string> = {}) => {
+      try {
+        const body = await this.authed('GET', path, { params: { locale, ...params } });
+        this.diag.log(`SONDA ${label}: ${shapeOf(body).slice(0, 700)}`);
+        return body as any;
+      } catch (e) {
+        if (e instanceof SessionExpiredError) throw e;
+        this.diag.log(`SONDA ${label}: ${(e as Error).message}`);
+        return null;
+      }
+    };
+    await run('fila (watchlist)', `/content/v2/discover/${acc}/watchlist`, { n: '3' });
+    await run('fila (antigo)', `/content/v2/${acc}/watchlist`, { n: '3' });
+    await run('histórico pág. 1 x1000', `/content/v2/${acc}/watch-history`, {
+      page: '1',
+      page_size: '1000',
+    });
+    await run('histórico pág. 2 x500', `/content/v2/${acc}/watch-history`, {
+      page: '2',
+      page_size: '500',
+    });
+    if (sample.episodeIds.length > 0) {
+      await run('progresso (playheads)', `/content/v2/${acc}/playheads`, {
+        content_ids: sample.episodeIds.slice(0, 3).join(','),
+      });
+    }
+    if (sample.seriesId) {
+      await run(
+        'metadados da série',
+        fill(this.settings.config().objectsPath, { ids: sample.seriesId }),
+      );
+      const seasons = await run(
+        'temporadas',
+        fill(this.settings.config().seasonsPath, { id: sample.seriesId }),
+      );
+      const first = seasons?.data?.[0]?.id;
+      if (first)
+        await run(
+          'episódios da temporada',
+          fill(this.settings.config().episodesPath, { id: first }),
+        );
+    }
+    this.diag.log('SONDA concluída');
   }
 
   /** Capas oficiais das séries (em lotes de 20). Falhas não interrompem: devolve o que conseguir. */
@@ -203,7 +313,7 @@ export class CrunchyrollService {
   ): Promise<DeleteOutcome> {
     const accountId = await this.accountId();
     const tpl = this.settings.config().deletePath;
-    const out: DeleteOutcome = { deleted: [], failed: [], cancelled: false };
+    const out: DeleteOutcome = { deleted: [], missing: [], failed: [], cancelled: false };
     opts.onProgress?.(0, ids.length);
     for (let i = 0; i < ids.length; i += DELETE_CONCURRENCY) {
       if (opts.isCancelled?.()) {
@@ -218,9 +328,11 @@ export class CrunchyrollService {
       results.forEach((r, idx) => {
         if (r.status === 'fulfilled') out.deleted.push(chunk[idx]);
         else if (r.reason instanceof SessionExpiredError) expired = true;
+        else if (r.reason instanceof ApiError && r.reason.status === 404)
+          out.missing!.push(chunk[idx]);
         else out.failed.push({ id: chunk[idx], error: (r.reason as Error).message });
       });
-      opts.onProgress?.(out.deleted.length + out.failed.length, ids.length);
+      opts.onProgress?.(out.deleted.length + out.missing!.length + out.failed.length, ids.length);
       if (expired) {
         // Não lança: o chamador precisa saber o que já foi apagado para atualizar a tela.
         out.expired = true;

@@ -102,6 +102,20 @@
         Nunca contém senha ou token. Se algo falhar, envie um print desta tela.
       </p>
 
+      <div class="mt-3 space-y-1">
+        <button
+          type="button"
+          class="btn w-full"
+          [disabled]="probing() || !loggedIn()"
+          (click)="probeApi()"
+        >
+          {{ probing() ? 'Investigando…' : 'Investigar a API (Fila e limites)' }}
+        </button>
+        <p class="text-xs text-zinc-400">
+          Só lê, não altera nada. Mostra nos registros acima o formato das respostas.
+        </p>
+      </div>
+
       <button type="button" class="link mt-1 -ml-2" (click)="showAdvanced.set(!showAdvanced())">
         Configurações avançadas da API
       </button>
@@ -310,14 +324,16 @@
       >
         <div class="grid grid-cols-2 gap-3 text-sm text-zinc-300">
           <label
-            >De<input
+            >{{ tab() === 'series' ? 'Última vez, a partir de' : 'Assistido a partir de'
+            }}<input
               type="date"
               class="field"
               [value]="filters().from"
               (input)="setFilter({ from: $any($event.target).value })"
           /></label>
           <label
-            >Até<input
+            >{{ tab() === 'series' ? 'Última vez, até' : 'Assistido até'
+            }}<input
               type="date"
               class="field"
               [value]="filters().to"
@@ -366,7 +382,7 @@
           </select>
         </label>
         <label class="block text-sm text-zinc-300"
-          >Carregar até (episódios do histórico; a Crunchyroll entrega no máximo 1000)
+          >Carregar até (episódios do histórico)
           <select class="field" (change)="setMaxEpisodes($any($event.target).value)">
             @for (n of limits; track n) {
               <option [value]="n" [selected]="n === settings.maxEpisodes()">
@@ -375,10 +391,23 @@
             }
           </select>
         </label>
-        @if (limitReached()) {
+        @if (coverageFrom(); as from) {
           <p class="text-sm text-zinc-400">
-            {{ settings.maxEpisodes() }} episódios carregados: pode haver mais no histórico. Escolha
-            um limite maior acima para ver mais.
+            O app enxerga {{ plural(episodes().length, 'episódio', 'episódios') }}, desde
+            {{ from | date: 'dd/MM/yyyy' }}.
+            @if (mayHaveMore()) {
+              A Crunchyroll só entrega os mais recentes; o app guarda no aparelho o que já viu,
+              então o alcance cresce com o tempo.
+            }
+          </p>
+        }
+        @if (coverageGapAt(); as gap) {
+          <p
+            role="status"
+            class="rounded-lg border border-amber-900 bg-amber-950 px-3 py-2 text-sm text-amber-200"
+          >
+            Atenção: o app só enxerga o histórico a partir de {{ gap | date: 'dd/MM/yyyy' }}. Séries
+            que você parou de assistir antes disso não aparecem neste filtro.
           </p>
         }
         <div class="flex items-center justify-between gap-2">

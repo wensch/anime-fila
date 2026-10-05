@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { Episode } from './models';
+import { slimForStorage } from './history';
 import { ApiConfig, DEFAULT_CONFIG, DEFAULT_MAX_EPISODES, EPISODE_LIMITS } from './endpoints';
 
 export interface Session {
@@ -95,10 +96,16 @@ export class SettingsService {
   }
 
   saveHistoryCache(episodes: Episode[]): void {
+    const slim = slimForStorage(episodes);
     try {
-      localStorage.setItem(KEY_HISTORY, JSON.stringify(episodes));
+      localStorage.setItem(KEY_HISTORY, JSON.stringify(slim));
     } catch {
-      /* sem espaço/armazenamento: abre sem cache */
+      try {
+        // Sem espaço para tudo: guarda os mais recentes.
+        localStorage.setItem(KEY_HISTORY, JSON.stringify(slim.slice(0, 2000)));
+      } catch {
+        /* sem armazenamento: abre sem cache */
+      }
     }
   }
 
