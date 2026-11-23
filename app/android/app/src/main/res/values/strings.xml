@@ -4,4 +4,11 @@
     <string name="title_activity_main">CrunchySync</string>
     <string name="package_name">dev.crunchysync.app</string>
     <string name="custom_url_scheme">dev.crunchysync.app</string>
+    <string name="widget_hero_label">Continuar assistindo · Destaque</string>
+    <string name="widget_hero_desc">O lançamento mais novo da sua fila, em destaque.</string>
+    <string name="widget_carousel_label">Continuar assistindo · Carrossel</string>
+    <string name="widget_carousel_desc">Os lançamentos mais novos da sua fila, lado a lado.</string>
+    <string name="widget_list_label">Continuar assistindo · Lista</string>
+    <string name="widget_list_desc">Sua fila em lista, do lançamento mais novo para o mais antigo.</string>
+    <string name="widget_empty">Abra o CrunchySync para carregar sua fila</string>
 </resources>

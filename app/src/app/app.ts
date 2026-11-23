@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { CoverCacheService } from './cover-cache.service';
 import { keyOf } from './cover-cache';
 import { DialogFocus } from './dialog-focus';
+import { HomeWidget } from './home-widget';
 import { plural, relativeTime } from './text';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
 import { DiagnosticsService } from './diagnostics.service';
@@ -44,6 +45,8 @@ import {
   WIDGET_STYLE_LABEL,
   WidgetSize,
   WidgetStyle,
+  parseSeriesLink,
+  toWidgetPayload,
   widgetCount,
 } from './widget';
 
@@ -171,6 +174,19 @@ export class App {
   protected setWidgetSize(v: WidgetSize): void {
     this.settings.setWidgetSize(v);
   }
+  /** O que vai para os widgets da tela inicial (mesma ordem do "Continuar assistindo"). */
+  private readonly widgetItems = computed(() => {
+    const covers = this.covers();
+    return toWidgetPayload(
+      continueWatching(this.episodes(), 10).map((c) => ({
+        ...c,
+        coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
+      })),
+    );
+  });
+  private lastWidgetKey = '';
+  /** Série pedida por toque num widget; abre quando o histórico estiver carregado. */
+  private readonly pendingSeries = signal<string | null>(null);
   protected readonly visibleSeries = computed(() =>
     filterSeries(this.allSeries(), this.seriesFilters(), this.sort()),
   );
@@ -252,6 +268,39 @@ export class App {
       },
       { passive: true },
     );
+    // Widgets da tela inicial: manda a lista sempre que ela muda; esvazia ao sair da conta.
+    effect(() => {
+      if (!Capacitor.isNativePlatform()) return;
+      if (!this.loggedIn()) {
+        if (this.lastWidgetKey !== 'cleared') {
+          this.lastWidgetKey = 'cleared';
+          void HomeWidget.clear().catch(() => (this.lastWidgetKey = ''));
+        }
+        return;
+      }
+      if (!this.loaded()) return;
+      const items = this.widgetItems();
+      const key = JSON.stringify(items);
+      if (key === this.lastWidgetKey) return;
+      this.lastWidgetKey = key;
+      void HomeWidget.update({ items }).catch(() => (this.lastWidgetKey = ''));
+    });
+    // Toque num widget: crunchysync://series/<id> abre os episódios da série.
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener('appUrlOpen', (e) => this.onLink(e.url));
+      void CapApp.getLaunchUrl().then((r) => this.onLink(r?.url));
+    }
+    document.addEventListener('crunchysync:link', (e) => this.onLink((e as CustomEvent).detail));
+    effect(() => {
+      const id = this.pendingSeries();
+      if (id === null || !this.loaded()) return;
+      this.pendingSeries.set(null);
+      const s = this.allSeries().find((x) => x.seriesId === id);
+      if (s) {
+        this.menuOpen.set(false);
+        this.showSeriesEpisodes(s.seriesId, s.title);
+      }
+    });
     void this.coverCache.init(); // lê as capas do disco (também num primeiro login)
     void this.update.check(); // Ao voltar ao app (vindo de outro), confere de novo se há versão nova.
     document.addEventListener('visibilitychange', () => {
@@ -350,6 +399,11 @@ export class App {
     const urls: Record<string, string> = {};
     for (const s of this.allSeries()) if (s.coverUrl) urls[s.seriesId] = s.coverUrl;
     void this.coverCache.sync(urls);
+  }
+
+  private onLink(url: string | null | undefined): void {
+    const id = parseSeriesLink(url);
+    if (id !== null) this.pendingSeries.set(id);
   }
 
   /** Imagem do cartão do "Continuar assistindo": miniatura do episódio ou capa da série. */

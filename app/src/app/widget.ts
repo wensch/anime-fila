@@ -1,3 +1,5 @@
+import type { ContinueItem } from './history';
+
 /** Aparência do widget "Continuar assistindo": estilo e tamanho escolhidos pelo usuário. */
 export const WIDGET_STYLES = ['carousel', 'list', 'hero'] as const;
 export const WIDGET_SIZES = ['s', 'm', 'l'] as const;
@@ -49,3 +51,45 @@ export const HERO_RAIL_CARD: Record<WidgetSize, string> = {
   m: 'w-40',
   l: 'w-48',
 };
+
+/** Item enviado ao plugin Android dos widgets da tela inicial. */
+export interface WidgetPushItem {
+  seriesId: string;
+  title: string;
+  /** "Ep. 9" ou vazio. */
+  episode: string;
+  /** Lançamento (ou, sem ele, quando foi assistido), em ms; null se desconhecido. */
+  releasedAt: number | null;
+  hasRelease: boolean;
+  progress: number | null;
+  coverUrl: string | null;
+}
+
+/** Quantos itens vão para os widgets da tela inicial (o maior layout mostra 5). */
+export const WIDGET_PUSH_MAX = 10;
+
+export function toWidgetPayload(items: ContinueItem[]): WidgetPushItem[] {
+  return items.slice(0, WIDGET_PUSH_MAX).map((c) => {
+    const t = Date.parse(c.releasedAt ?? '');
+    return {
+      seriesId: c.seriesId,
+      title: c.seriesTitle,
+      episode: c.episodeNumber !== null ? `Ep. ${c.episodeNumber}` : '',
+      releasedAt: Number.isNaN(t) ? null : t,
+      hasRelease: c.hasRelease,
+      progress: c.progress,
+      coverUrl: c.coverUrl,
+    };
+  });
+}
+
+/** `crunchysync://series/<id>` (toque num widget) -> id da série; qualquer outro endereço -> null. */
+export function parseSeriesLink(url: string | null | undefined): string | null {
+  const m = /^crunchysync:\/\/series\/([^/?#]+)/.exec(url ?? '');
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+}

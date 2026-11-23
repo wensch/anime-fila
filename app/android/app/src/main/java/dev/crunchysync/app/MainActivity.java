@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PageFetchPlugin.class);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(HomeWidgetPlugin.class);
         super.onCreate(savedInstanceState);
         // Voltar fecha o WebView de login/verificação (se aberto) antes de sair do app.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
