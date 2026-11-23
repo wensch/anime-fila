@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { Episode } from './models';
 import { slimForStorage } from './history';
+import type { NextState } from './queue';
 import {
   DEFAULT_WIDGET_SIZE,
   DEFAULT_WIDGET_STYLE,
@@ -21,6 +22,7 @@ export interface Session {
 const KEY = 'crunchysync.v2';
 const KEY_COVERS = 'crunchysync.covers';
 const KEY_HISTORY = 'crunchysync.history';
+const KEY_NEXT = 'crunchysync.next';
 
 interface Stored {
   session: Session | null;
@@ -143,6 +145,32 @@ export class SettingsService {
   setWidgetSize(v: WidgetSize): void {
     this.widgetSize.set(v);
     this.persist();
+  }
+
+  /** Próximo episódio de cada série (fila "continuar assistindo"), guardado entre aberturas. */
+  loadNext(): Record<string, NextState> {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY_NEXT) ?? '{}');
+      return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    } catch {
+      return {};
+    }
+  }
+
+  saveNext(next: Record<string, NextState>): void {
+    try {
+      localStorage.setItem(KEY_NEXT, JSON.stringify(next));
+    } catch {
+      /* sem armazenamento: busca de novo na próxima abertura */
+    }
+  }
+
+  clearNext(): void {
+    try {
+      localStorage.removeItem(KEY_NEXT);
+    } catch {
+      /* ignora */
+    }
   }
 
   setMaxEpisodes(n: number): void {

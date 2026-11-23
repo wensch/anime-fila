@@ -11,6 +11,10 @@ export interface Episode {
   airedAt?: string | null;
   /** Até onde você assistiu, de 0 a 1 (1 = terminou), se a API informou. */
   progress?: number | null;
+  /** Onde o episódio fica na série (para achar o próximo): temporada e posição nela. */
+  seasonId?: string | null;
+  seasonNumber?: number | null;
+  sequence?: number | null;
 }
 
 export interface Series {

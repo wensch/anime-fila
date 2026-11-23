@@ -56,3 +56,14 @@ export const MAX_CATALOG_IDS = 3000;
 export const ARCHIVE_MAX = 8000;
 /** Rodadas extras de remoção: os episódios mais antigos "sobem" na janela depois que os recentes saem. */
 export const MAX_REMOVE_ROUNDS = 10;
+
+/** Fila "continuar assistindo": quantas séries (as vistas mais recentemente) têm o próximo episódio buscado. */
+export const QUEUE_CANDIDATES = 30;
+/** Séries consultadas ao mesmo tempo no catálogo. */
+export const QUEUE_CONCURRENCY = 2;
+/** Validade do resultado: com próximo episódio já lançado (muda só quando você assiste)... */
+export const NEXT_TTL_MS = 24 * 3_600_000;
+/** ...e sem próximo (um novo episódio pode sair a qualquer momento). */
+export const NEXT_TTL_EMPTY_MS = 6 * 3_600_000;
+/** Depois de uma falha, só tenta a mesma série de novo depois disso. */
+export const NEXT_RETRY_MS = 30 * 60_000;

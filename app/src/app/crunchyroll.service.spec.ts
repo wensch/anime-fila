@@ -302,3 +302,58 @@ describe('janela maior e catálogo', () => {
     expect(log).not.toContain('valor-pessoal');
   });
 });
+
+describe('resolveNext (fila)', () => {
+  const episode = {
+    episodeId: 'e9',
+    seriesId: 'S1',
+    seriesTitle: 'Série',
+    episodeTitle: null,
+    episodeNumber: 9,
+    coverUrl: null,
+    watchedAt: '2026-10-01T00:00:00Z',
+    seasonId: 'T1',
+    seasonNumber: 1,
+    sequence: 9,
+  };
+  const catalog = (episodes: unknown[]) =>
+    request.mockImplementation(async (opts: { url: string }) => {
+      const p = new URL(opts.url).pathname;
+      if (p.endsWith('/series/S1/seasons')) return ok({ data: [{ id: 'T1', season_number: 1 }] });
+      if (p.endsWith('/seasons/T1/episodes')) return ok({ data: episodes });
+      return ok({}, 404);
+    });
+
+  it('acha o próximo episódio lançado', async () => {
+    const { cr } = setup();
+    catalog([
+      {
+        id: 'e9',
+        episode_number: 9,
+        sequence_number: 9,
+        premium_available_date: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'e10',
+        episode_number: 10,
+        sequence_number: 10,
+        premium_available_date: '2026-10-08T00:00:00Z',
+      },
+    ]);
+    const n = await cr.resolveNext(episode, Date.parse('2026-10-10T00:00:00Z'));
+    expect(n?.episodeId).toBe('e10');
+    expect(request.mock.calls.every((c) => method(c) === 'GET')).toBe(true);
+  });
+
+  it('série terminada devolve null', async () => {
+    const { cr } = setup();
+    catalog([{ id: 'e9', episode_number: 9, sequence_number: 9 }]);
+    expect(await cr.resolveNext(episode)).toBeNull();
+  });
+
+  it('erro do catálogo é lançado (a série fica na fila e tenta depois)', async () => {
+    const { cr } = setup();
+    request.mockResolvedValue(ok({}, 404));
+    await expect(cr.resolveNext(episode)).rejects.toBeInstanceOf(ApiError);
+  });
+});

@@ -71,6 +71,7 @@ describe('widgets da tela inicial', () => {
     hasRelease: true,
     watchedAt: '2026-09-29T12:00:00Z',
     progress: 0.5,
+    isNext: false,
     ...over,
   });
 

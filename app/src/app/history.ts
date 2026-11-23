@@ -1,4 +1,5 @@
 import { Episode, Series } from './models';
+import type { NextState } from './queue';
 
 /** Maior imagem de `images.thumbnail` (array de arrays de {width, source}). */
 export function pickLargestImage(images: any): string | null {
@@ -30,7 +31,16 @@ export function normalizeHistoryItem(raw: any): Episode | null {
     airedAt:
       meta.episode_air_date ?? meta.premium_available_date ?? meta.availability_starts ?? null,
     progress: progressOf(raw, meta),
+    seasonId: meta.season_id ?? null,
+    seasonNumber: numOrNull(meta.season_number),
+    sequence: numOrNull(meta.sequence_number),
   };
+}
+
+function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** Fração assistida (0..1) a partir de `playhead` (s) e da duração; null se não der para saber. */
@@ -285,6 +295,23 @@ export interface ContinueItem {
   hasRelease: boolean;
   watchedAt: string | null;
   progress: number | null;
+  /** true se este é o PRÓXIMO episódio (o que você viu já terminou); false = o que você parou. */
+  isNext: boolean;
+}
+
+/** Assistiu o episódio até o fim? Sem informação de progresso, conta como assistido. */
+export function isWatched(e: Episode): boolean {
+  return e.progress === null || e.progress === undefined || e.progress >= 0.9;
+}
+
+/** O episódio assistido mais recentemente de cada série. */
+export function latestPerSeries(episodes: Episode[]): Episode[] {
+  const latest = new Map<string, Episode>();
+  for (const e of episodes) {
+    const cur = latest.get(e.seriesId);
+    if (!cur || time(e.watchedAt) > time(cur.watchedAt)) latest.set(e.seriesId, e);
+  }
+  return [...latest.values()].sort((a, b) => time(b.watchedAt) - time(a.watchedAt));
 }
 
 /**
@@ -292,15 +319,34 @@ export interface ContinueItem {
  * recentemente), ordenado pelo LANÇAMENTO do episódio, do mais novo para o mais antigo. Quando a
  * API não informa o lançamento, usa a data em que foi assistido.
  */
-export function continueWatching(episodes: Episode[], limit = 20): ContinueItem[] {
-  const latest = new Map<string, Episode>();
-  for (const e of episodes) {
-    const cur = latest.get(e.seriesId);
-    if (!cur || time(e.watchedAt) > time(cur.watchedAt)) latest.set(e.seriesId, e);
-  }
-  const items: ContinueItem[] = [...latest.values()].map((e) => {
+export function continueWatching(
+  episodes: Episode[],
+  limit = 20,
+  next: Record<string, NextState> = {},
+): ContinueItem[] {
+  const items: ContinueItem[] = [];
+  for (const e of latestPerSeries(episodes)) {
+    const st = next[e.seriesId];
+    if (isWatched(e) && st && st.forEpisodeId === e.episodeId) {
+      // Já terminou esse episódio: o que vale é o próximo. Sem próximo lançado, sai da fila.
+      if (st.next === null) continue;
+      items.push({
+        seriesId: e.seriesId,
+        seriesTitle: e.seriesTitle,
+        episodeId: st.next.episodeId,
+        episodeNumber: st.next.number,
+        episodeTitle: st.next.title,
+        coverUrl: st.next.coverUrl ?? e.coverUrl,
+        releasedAt: st.next.releasedAt,
+        hasRelease: time(st.next.releasedAt) !== 0,
+        watchedAt: e.watchedAt,
+        progress: null,
+        isNext: true,
+      });
+      continue;
+    }
     const hasRelease = time(e.airedAt) !== 0;
-    return {
+    items.push({
       seriesId: e.seriesId,
       seriesTitle: e.seriesTitle,
       episodeId: e.episodeId,
@@ -311,8 +357,9 @@ export function continueWatching(episodes: Episode[], limit = 20): ContinueItem[
       hasRelease,
       watchedAt: e.watchedAt,
       progress: e.progress ?? null,
-    };
-  });
+      isNext: false,
+    });
+  }
   items.sort(
     (a, b) => time(b.releasedAt) - time(a.releasedAt) || time(b.watchedAt) - time(a.watchedAt),
   );

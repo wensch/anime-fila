@@ -1,6 +1,6 @@
 package dev.crunchysync.app;
 
-/** Widget "Lista": até 5 linhas; quantas cabem depende da altura. */
+/** Widget "Lista": até 10 linhas; quantas cabem depende da altura. */
 public class ListWidgetProvider extends BaseContinueProvider {
     @Override
     protected int layoutId() {
@@ -9,11 +9,11 @@ public class ListWidgetProvider extends BaseContinueProvider {
 
     @Override
     protected int maxSlots() {
-        return 5;
+        return 10;
     }
 
     @Override
     protected int visibleSlots(int widthDp, int heightDp) {
-        return Math.max(1, Math.min(5, (heightDp - 36) / 58));
+        return Math.max(1, Math.min(10, (heightDp - 36) / 58));
     }
 }

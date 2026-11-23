@@ -15,6 +15,11 @@ import {
   EPISODE_LIMITS,
   FULL_SCAN_LIMIT,
   MAX_REMOVE_ROUNDS,
+  NEXT_RETRY_MS,
+  NEXT_TTL_EMPTY_MS,
+  NEXT_TTL_MS,
+  QUEUE_CANDIDATES,
+  QUEUE_CONCURRENCY,
   limitLabel,
 } from './endpoints';
 import {
@@ -28,8 +33,11 @@ import {
   filterEpisodes,
   filterSeries,
   groupBySeries,
+  isWatched,
+  latestPerSeries,
   mergeArchive,
 } from './history';
+import { NextState, needsResolve } from './queue';
 import { Episode } from './models';
 import { BackState, backAction } from './navigation';
 import { SettingsService } from './settings.service';
@@ -154,7 +162,7 @@ export class App {
   protected readonly continueItems = computed(() => {
     const covers = this.covers();
     const count = widgetCount(this.settings.widgetStyle(), this.settings.widgetSize());
-    return continueWatching(this.episodes(), count).map((c) => ({
+    return continueWatching(this.episodes(), count, this.nextStates()).map((c) => ({
       ...c,
       coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
     }));
@@ -178,13 +186,17 @@ export class App {
   private readonly widgetItems = computed(() => {
     const covers = this.covers();
     return toWidgetPayload(
-      continueWatching(this.episodes(), 10).map((c) => ({
+      continueWatching(this.episodes(), 10, this.nextStates()).map((c) => ({
         ...c,
         coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
       })),
     );
   });
   private lastWidgetKey = '';
+  /** Próximo episódio de cada série (some da fila quem terminou ou está em dia). */
+  protected readonly nextStates = signal<Record<string, NextState>>(this.settings.loadNext());
+  private resolvingQueue = false;
+  private readonly queueFailedAt = new Map<string, number>();
   /** Série pedida por toque num widget; abre quando o histórico estiver carregado. */
   private readonly pendingSeries = signal<string | null>(null);
   protected readonly visibleSeries = computed(() =>
@@ -335,6 +347,8 @@ export class App {
   protected async logout(): Promise<void> {
     await this.cr.logout();
     this.settings.clearHistoryCache();
+    this.settings.clearNext();
+    this.nextStates.set({});
     this.episodes.set([]);
     this.loaded.set(false);
     this.selected.set(new Set());
@@ -371,10 +385,63 @@ export class App {
       this.selected.set(new Set());
       this.selectedSeries.set(new Set());
       void this.loadCovers();
+      void this.resolveQueue();
     } catch (e) {
       this.handleError(e);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /**
+   * Para as séries vistas mais recentemente cujo último episódio já terminou, procura o próximo
+   * episódio lançado no catálogo. Sem próximo (série terminada ou em dia), a série sai da fila.
+   * Resultados ficam guardados; falhas deixam a série na fila e tentam de novo mais tarde.
+   */
+  private async resolveQueue(): Promise<void> {
+    if (this.resolvingQueue) return;
+    this.resolvingQueue = true;
+    try {
+      const now = Date.now();
+      const states = this.nextStates();
+      const todo = latestPerSeries(this.episodes())
+        .slice(0, QUEUE_CANDIDATES)
+        .filter(
+          (e) =>
+            isWatched(e) &&
+            needsResolve(states[e.seriesId], e.episodeId, now, NEXT_TTL_MS, NEXT_TTL_EMPTY_MS) &&
+            now - (this.queueFailedAt.get(e.seriesId) ?? 0) > NEXT_RETRY_MS,
+        );
+      const worker = async (): Promise<void> => {
+        for (let e = todo.shift(); e; e = todo.shift()) {
+          try {
+            const next = await this.cr.resolveNext(e);
+            if (next === undefined) {
+              this.queueFailedAt.set(e.seriesId, Date.now());
+              continue;
+            }
+            const entry: NextState = { forEpisodeId: e.episodeId, next, checkedAt: Date.now() };
+            this.nextStates.update((cur) => ({ ...cur, [e.seriesId]: entry }));
+            this.settings.saveNext(this.nextStates()); // guarda já: uma série lenta não atrasa as outras
+          } catch (err) {
+            if (err instanceof SessionExpiredError) {
+              todo.length = 0;
+              this.handleError(err);
+              return;
+            }
+            this.queueFailedAt.set(e.seriesId, Date.now());
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: QUEUE_CONCURRENCY }, () => worker()));
+      // Guarda só as séries que ainda estão no histórico.
+      const alive = new Set(this.episodes().map((x) => x.seriesId));
+      const pruned = Object.fromEntries(
+        Object.entries(this.nextStates()).filter(([id]) => alive.has(id)),
+      );
+      this.settings.saveNext(pruned);
+    } finally {
+      this.resolvingQueue = false;
     }
   }
 

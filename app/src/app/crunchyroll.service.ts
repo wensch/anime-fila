@@ -10,6 +10,7 @@ import {
   PAGE_SIZE,
 } from './endpoints';
 import { extractSeriesCovers, normalizeHistoryItem } from './history';
+import { NextEpisode, findNext, normalizeCatalogEpisodes, normalizeSeasons } from './queue';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
 import { Session, SettingsService } from './settings.service';
@@ -226,6 +227,43 @@ export class CrunchyrollService {
     }
     this.diag.log(`catálogo: ${ids.size} episódios (incl. versões) para a série`);
     return [...ids].slice(0, MAX_CATALOG_IDS);
+  }
+
+  /**
+   * Próximo episódio já lançado depois do que o usuário viu por último, pelo catálogo da série.
+   * null = não há (série terminada ou em dia); undefined = não deu para saber. Falhas de rede/API
+   * são lançadas: quem chama decide (a série segue na fila e tenta de novo mais tarde).
+   */
+  async resolveNext(e: Episode, now = Date.now()): Promise<NextEpisode | null | undefined> {
+    const cfg = this.settings.config();
+    const params = { locale: cfg.locale };
+    const seasons = normalizeSeasons(
+      await this.authed('GET', fill(cfg.seasonsPath, { id: e.seriesId }), { params }),
+    );
+    const next = await findNext(
+      {
+        seasonId: e.seasonId ?? null,
+        seasonNumber: e.seasonNumber ?? null,
+        sequence: e.sequence ?? null,
+        number: e.episodeNumber,
+      },
+      seasons,
+      async (seasonId) =>
+        normalizeCatalogEpisodes(
+          await this.authed('GET', fill(cfg.episodesPath, { id: seasonId }), { params }),
+        ),
+      now,
+    );
+    this.diag.log(
+      `fila: "${e.seriesTitle}" ep ${e.episodeNumber ?? '?'} -> ${
+        next === undefined
+          ? 'indefinido'
+          : next === null
+            ? 'sem próximo'
+            : 'próximo ep ' + (next.number ?? '?')
+      }`,
+    );
+    return next;
   }
 
   /**
