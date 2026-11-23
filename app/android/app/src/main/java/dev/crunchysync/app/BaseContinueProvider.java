@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
@@ -86,7 +87,7 @@ public abstract class BaseContinueProvider extends AppWidgetProvider {
             } else {
                 v.setViewVisibility(prog, View.GONE);
             }
-            if (slot != 0) v.setOnClickPendingIntent(slot, link(ctx, it.seriesId));
+            if (slot != 0) v.setOnClickPendingIntent(slot, episodeLink(ctx, it.episodeId));
         }
         afterBind(ctx, v, items, visible);
         mgr.updateAppWidget(id, v);
@@ -113,6 +114,27 @@ public abstract class BaseContinueProvider extends AppWidgetProvider {
 
     private static int idOf(Context ctx, String name) {
         return ctx.getResources().getIdentifier(name, "id", ctx.getPackageName());
+    }
+
+    /**
+     * Abre o episódio no app da Crunchyroll (se instalado; senão o link https vai para o navegador).
+     * Sem um id válido, abre o CrunchySync.
+     */
+    static PendingIntent episodeLink(Context ctx, String episodeId) {
+        if (!ExternalLinkPlugin.validEpisodeId(episodeId)) return link(ctx, null);
+        Intent i = new Intent(Intent.ACTION_VIEW, ExternalLinkPlugin.episodeUri(episodeId));
+        if (crunchyrollInstalled(ctx)) i.setPackage(ExternalLinkPlugin.CRUNCHYROLL_PACKAGE);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return PendingIntent.getActivity(ctx, 0, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    private static boolean crunchyrollInstalled(Context ctx) {
+        try {
+            ctx.getPackageManager().getPackageInfo(ExternalLinkPlugin.CRUNCHYROLL_PACKAGE, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     /** Abre o app; com seriesId, abre direto os episódios da série (crunchysync://series/ID). */

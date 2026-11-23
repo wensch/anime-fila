@@ -562,9 +562,9 @@
                         [attr.aria-label]="
                           c.seriesTitle +
                           (c.episodeNumber !== null ? ', episódio ' + c.episodeNumber : '') +
-                          '. Ver episódios'
+                          '. Abrir na Crunchyroll'
                         "
-                        (click)="showSeriesEpisodes(c.seriesId, c.seriesTitle)"
+                        (click)="openEpisode(c.episodeId)"
                       >
                         <div
                           class="relative aspect-video shrink-0 overflow-hidden rounded-lg bg-zinc-800"
@@ -596,8 +596,8 @@
                   <button
                     type="button"
                     class="relative block w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 text-left"
-                    [attr.aria-label]="first.seriesTitle + '. Ver episódios'"
-                    (click)="showSeriesEpisodes(first.seriesId, first.seriesTitle)"
+                    [attr.aria-label]="first.seriesTitle + '. Abrir na Crunchyroll'"
+                    (click)="openEpisode(first.episodeId)"
                   >
                     <div class="relative bg-zinc-800" [class]="heroShape()">
                       <ng-container
@@ -631,8 +631,8 @@
                         <button
                           type="button"
                           class="block w-full text-left"
-                          [attr.aria-label]="c.seriesTitle + '. Ver episódios'"
-                          (click)="showSeriesEpisodes(c.seriesId, c.seriesTitle)"
+                          [attr.aria-label]="c.seriesTitle + '. Abrir na Crunchyroll'"
+                          (click)="openEpisode(c.episodeId)"
                         >
                           <div class="relative aspect-video overflow-hidden rounded-lg bg-zinc-800">
                             <ng-container
@@ -663,9 +663,9 @@
                         [attr.aria-label]="
                           c.seriesTitle +
                           (c.episodeNumber !== null ? ', episódio ' + c.episodeNumber : '') +
-                          '. Ver episódios'
+                          '. Abrir na Crunchyroll'
                         "
-                        (click)="showSeriesEpisodes(c.seriesId, c.seriesTitle)"
+                        (click)="openEpisode(c.episodeId)"
                       >
                         <div class="relative aspect-video bg-zinc-800">
                           <ng-container
@@ -928,6 +928,29 @@
                       </p>
                     }
                   </div>
+                  <button
+                    type="button"
+                    class="icon-btn shrink-0"
+                    [attr.aria-label]="
+                      'Abrir ' +
+                      e.seriesTitle +
+                      (e.episodeNumber !== null ? ' episódio ' + e.episodeNumber : '') +
+                      ' na Crunchyroll'
+                    "
+                    title="Abrir na Crunchyroll"
+                    (click)="$event.preventDefault(); openEpisode(e.episodeId)"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      class="h-6 w-6 text-orange-500"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"
+                      />
+                    </svg>
+                  </button>
                 </label>
               </li>
             }

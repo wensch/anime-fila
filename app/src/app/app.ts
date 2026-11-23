@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { CoverCacheService } from './cover-cache.service';
 import { keyOf } from './cover-cache';
 import { DialogFocus } from './dialog-focus';
+import { ExternalLink, episodeUrl } from './external-link';
 import { HomeWidget } from './home-widget';
 import { plural, relativeTime } from './text';
 import { ApiError, CrunchyrollService, SessionExpiredError } from './crunchyroll.service';
@@ -466,6 +467,20 @@ export class App {
     const urls: Record<string, string> = {};
     for (const s of this.allSeries()) if (s.coverUrl) urls[s.seriesId] = s.coverUrl;
     void this.coverCache.sync(urls);
+  }
+
+  /** Abre o episódio no aplicativo da Crunchyroll (no navegador, se o app não estiver instalado). */
+  protected async openEpisode(episodeId: string): Promise<void> {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const r = await ExternalLink.openEpisode({ episodeId });
+        if (!r.app) this.notice.set('Aplicativo da Crunchyroll não encontrado: abri no navegador.');
+      } else {
+        window.open(episodeUrl(episodeId), '_blank', 'noopener');
+      }
+    } catch {
+      this.notice.set('Não consegui abrir o episódio na Crunchyroll.');
+    }
   }
 
   private onLink(url: string | null | undefined): void {

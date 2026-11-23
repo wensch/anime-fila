@@ -55,6 +55,8 @@ export const HERO_RAIL_CARD: Record<WidgetSize, string> = {
 /** Item enviado ao plugin Android dos widgets da tela inicial. */
 export interface WidgetPushItem {
   seriesId: string;
+  /** Episódio que o toque abre na Crunchyroll. */
+  episodeId: string;
   title: string;
   /** "Ep. 9" ou vazio. */
   episode: string;
@@ -73,6 +75,7 @@ export function toWidgetPayload(items: ContinueItem[]): WidgetPushItem[] {
     const t = Date.parse(c.releasedAt ?? '');
     return {
       seriesId: c.seriesId,
+      episodeId: c.episodeId,
       title: c.seriesTitle,
       episode: c.episodeNumber !== null ? `Ep. ${c.episodeNumber}` : '',
       releasedAt: Number.isNaN(t) ? null : t,

@@ -54,6 +54,7 @@ public class HomeWidgetPlugin extends Plugin {
                     JSONObject o = arr.getJSONObject(i);
                     WidgetData.Item it = new WidgetData.Item();
                     it.seriesId = o.optString("seriesId", "");
+                    it.episodeId = o.optString("episodeId", "");
                     it.title = o.optString("title", "");
                     it.episode = o.optString("episode", "");
                     it.releasedAt = o.isNull("releasedAt") ? 0L : o.optLong("releasedAt", 0L);

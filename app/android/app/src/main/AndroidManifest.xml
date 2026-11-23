@@ -79,6 +79,11 @@
         </provider>
     </application>
 
+    <!-- Android 11+: permite saber se o app da Crunchyroll está instalado (toque nos widgets). -->
+    <queries>
+        <package android:name="com.crunchyroll.crunchyroid" />
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

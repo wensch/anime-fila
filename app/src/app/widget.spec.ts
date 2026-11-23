@@ -79,6 +79,7 @@ describe('widgets da tela inicial', () => {
     const [p] = toWidgetPayload([item()]);
     expect(p).toEqual({
       seriesId: 'S1',
+      episodeId: 'e1',
       title: 'Solo Leveling',
       episode: 'Ep. 9',
       releasedAt: Date.parse('2026-09-28T12:00:00Z'),
@@ -109,5 +110,13 @@ describe('widgets da tela inicial', () => {
     expect(parseSeriesLink('https://example.com/series/x')).toBeNull();
     expect(parseSeriesLink(null)).toBeNull();
     expect(parseSeriesLink('crunchysync://series/%E0%A4%A')).toBeNull();
+  });
+});
+
+describe('abrir episódio na Crunchyroll', () => {
+  it('monta o link do episódio e protege o id', async () => {
+    const { episodeUrl } = await import('./external-link');
+    expect(episodeUrl('GRDQPM1ZY')).toBe('https://www.crunchyroll.com/watch/GRDQPM1ZY');
+    expect(episodeUrl('a/b?x')).toBe('https://www.crunchyroll.com/watch/a%2Fb%3Fx');
   });
 });

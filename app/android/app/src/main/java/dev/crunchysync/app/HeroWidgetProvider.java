@@ -24,7 +24,7 @@ public class HeroWidgetProvider extends BaseContinueProvider {
 
     @Override
     protected void afterBind(Context ctx, RemoteViews v, List<WidgetData.Item> items, int visible) {
-        // O widget inteiro é o item: toque abre os episódios daquela série.
-        if (!items.isEmpty()) v.setOnClickPendingIntent(android.R.id.background, link(ctx, items.get(0).seriesId));
+        // O widget inteiro é o item: toque abre o episódio na Crunchyroll.
+        if (!items.isEmpty()) v.setOnClickPendingIntent(android.R.id.background, episodeLink(ctx, items.get(0).episodeId));
     }
 }

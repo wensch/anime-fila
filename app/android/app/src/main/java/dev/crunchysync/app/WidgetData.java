@@ -18,6 +18,8 @@ final class WidgetData {
 
     static final class Item {
         String seriesId;
+        /** Episódio que o toque abre na Crunchyroll. */
+        String episodeId = "";
         String title;
         /** "Ep. 9" ou vazio. */
         String episode = "";
@@ -39,6 +41,7 @@ final class WidgetData {
                 JSONObject o = arr.getJSONObject(i);
                 Item it = new Item();
                 it.seriesId = o.optString("seriesId", "");
+                it.episodeId = o.optString("episodeId", "");
                 it.title = o.optString("title", "");
                 it.episode = o.optString("episode", "");
                 it.releasedAt = o.optLong("releasedAt", 0L);
@@ -58,6 +61,7 @@ final class WidgetData {
         for (Item it : items) {
             JSONObject o = new JSONObject();
             o.put("seriesId", it.seriesId);
+            o.put("episodeId", it.episodeId);
             o.put("title", it.title);
             o.put("episode", it.episode);
             o.put("releasedAt", it.releasedAt);
