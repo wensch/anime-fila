@@ -1,6 +1,14 @@
 import { Injectable, signal } from '@angular/core';
 import { Episode } from './models';
 import { slimForStorage } from './history';
+import {
+  DEFAULT_WIDGET_SIZE,
+  DEFAULT_WIDGET_STYLE,
+  WidgetSize,
+  WidgetStyle,
+  isWidgetSize,
+  isWidgetStyle,
+} from './widget';
 import { ApiConfig, DEFAULT_CONFIG, DEFAULT_MAX_EPISODES, EPISODE_LIMITS } from './endpoints';
 
 export interface Session {
@@ -19,6 +27,8 @@ interface Stored {
   config: ApiConfig;
   deviceId: string;
   maxEpisodes: number;
+  widgetStyle: WidgetStyle;
+  widgetSize: WidgetSize;
 }
 
 function load(): Stored {
@@ -32,6 +42,8 @@ function load(): Stored {
         maxEpisodes: EPISODE_LIMITS.includes(parsed.maxEpisodes)
           ? parsed.maxEpisodes
           : DEFAULT_MAX_EPISODES,
+        widgetStyle: isWidgetStyle(parsed.widgetStyle) ? parsed.widgetStyle : DEFAULT_WIDGET_STYLE,
+        widgetSize: isWidgetSize(parsed.widgetSize) ? parsed.widgetSize : DEFAULT_WIDGET_SIZE,
       };
     }
   } catch {
@@ -42,6 +54,8 @@ function load(): Stored {
     config: { ...DEFAULT_CONFIG },
     deviceId: crypto.randomUUID(),
     maxEpisodes: DEFAULT_MAX_EPISODES,
+    widgetStyle: DEFAULT_WIDGET_STYLE,
+    widgetSize: DEFAULT_WIDGET_SIZE,
   };
 }
 
@@ -117,6 +131,20 @@ export class SettingsService {
     }
   }
 
+  /** Aparência do widget "Continuar assistindo". */
+  readonly widgetStyle = signal<WidgetStyle>(this.initial.widgetStyle);
+  readonly widgetSize = signal<WidgetSize>(this.initial.widgetSize);
+
+  setWidgetStyle(v: WidgetStyle): void {
+    this.widgetStyle.set(v);
+    this.persist();
+  }
+
+  setWidgetSize(v: WidgetSize): void {
+    this.widgetSize.set(v);
+    this.persist();
+  }
+
   setMaxEpisodes(n: number): void {
     this.maxEpisodes.set(n);
     this.persist();
@@ -140,6 +168,8 @@ export class SettingsService {
         config: overrides,
         deviceId: this.deviceId,
         maxEpisodes: this.maxEpisodes(),
+        widgetStyle: this.widgetStyle(),
+        widgetSize: this.widgetSize(),
       };
       localStorage.setItem(KEY, JSON.stringify(data));
     } catch {

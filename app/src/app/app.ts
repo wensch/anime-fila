@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
@@ -33,6 +33,19 @@ import { Episode } from './models';
 import { BackState, backAction } from './navigation';
 import { SettingsService } from './settings.service';
 import { UpdateService } from './update.service';
+import {
+  CAROUSEL_CARD,
+  HERO_RAIL_CARD,
+  HERO_SHAPE,
+  LIST_THUMB,
+  WIDGET_SIZES,
+  WIDGET_SIZE_LABEL,
+  WIDGET_STYLES,
+  WIDGET_STYLE_LABEL,
+  WidgetSize,
+  WidgetStyle,
+  widgetCount,
+} from './widget';
 
 type Tab = 'series' | 'episodes';
 /** O que será removido (já com os episódios exatos) e aguarda confirmação. */
@@ -55,7 +68,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 @Component({
   selector: 'app-root',
-  imports: [DatePipe, DialogFocus],
+  imports: [DatePipe, DialogFocus, NgTemplateOutlet],
   templateUrl: './app.html',
 })
 export class App {
@@ -137,11 +150,27 @@ export class App {
   /** "Continuar assistindo": um episódio por série, do lançamento mais novo para o mais antigo. */
   protected readonly continueItems = computed(() => {
     const covers = this.covers();
-    return continueWatching(this.episodes()).map((c) => ({
+    const count = widgetCount(this.settings.widgetStyle(), this.settings.widgetSize());
+    return continueWatching(this.episodes(), count).map((c) => ({
       ...c,
       coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
     }));
   });
+  protected readonly widgetStyles = WIDGET_STYLES;
+  protected readonly widgetSizes = WIDGET_SIZES;
+  protected readonly widgetStyleLabel = WIDGET_STYLE_LABEL;
+  protected readonly widgetSizeLabel = WIDGET_SIZE_LABEL;
+  protected readonly widgetCfgOpen = signal(false);
+  protected readonly carouselCard = computed(() => CAROUSEL_CARD[this.settings.widgetSize()]);
+  protected readonly listThumb = computed(() => LIST_THUMB[this.settings.widgetSize()]);
+  protected readonly heroShape = computed(() => HERO_SHAPE[this.settings.widgetSize()]);
+  protected readonly heroRailCard = computed(() => HERO_RAIL_CARD[this.settings.widgetSize()]);
+  protected setWidgetStyle(v: WidgetStyle): void {
+    this.settings.setWidgetStyle(v);
+  }
+  protected setWidgetSize(v: WidgetSize): void {
+    this.settings.setWidgetSize(v);
+  }
   protected readonly visibleSeries = computed(() =>
     filterSeries(this.allSeries(), this.seriesFilters(), this.sort()),
   );
