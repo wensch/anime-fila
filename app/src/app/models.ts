@@ -7,6 +7,10 @@ export interface Episode {
   coverUrl: string | null;
   /** ISO 8601 ou null se a API não informou. */
   watchedAt: string | null;
+  /** Quando o episódio foi lançado (ISO), se a API informou. */
+  airedAt?: string | null;
+  /** Até onde você assistiu, de 0 a 1 (1 = terminou), se a API informou. */
+  progress?: number | null;
 }
 
 export interface Series {

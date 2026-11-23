@@ -21,6 +21,7 @@ import {
   Filters,
   SeriesSort,
   coverageGap,
+  continueWatching,
   coverageStart,
   episodesOfSeries,
   filterEpisodes,
@@ -131,6 +132,14 @@ export class App {
     return groupBySeries(this.episodes()).map((s) => ({
       ...s,
       coverUrl: covers[s.seriesId] ?? s.coverUrl,
+    }));
+  });
+  /** "Continuar assistindo": um episódio por série, do lançamento mais novo para o mais antigo. */
+  protected readonly continueItems = computed(() => {
+    const covers = this.covers();
+    return continueWatching(this.episodes()).map((c) => ({
+      ...c,
+      coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
     }));
   });
   protected readonly visibleSeries = computed(() =>
@@ -312,6 +321,11 @@ export class App {
     const urls: Record<string, string> = {};
     for (const s of this.allSeries()) if (s.coverUrl) urls[s.seriesId] = s.coverUrl;
     void this.coverCache.sync(urls);
+  }
+
+  /** Imagem do cartão do "Continuar assistindo": miniatura do episódio ou capa da série. */
+  protected continueSrc(c: { seriesId: string; coverUrl: string | null }): string | null {
+    return this.coverCache.ready() ? (this.coverSrc(c) ?? c.coverUrl) : null;
   }
 
   /** Endereço da capa: o arquivo salvo no aparelho, ou o remoto se ainda não foi baixado. */

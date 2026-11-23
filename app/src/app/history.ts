@@ -27,7 +27,19 @@ export function normalizeHistoryItem(raw: any): Episode | null {
     episodeNumber: Number.isFinite(num) ? num : null,
     coverUrl: pickLargestImage(panel.images),
     watchedAt: raw?.date_played ?? null,
+    airedAt:
+      meta.episode_air_date ?? meta.premium_available_date ?? meta.availability_starts ?? null,
+    progress: progressOf(raw, meta),
   };
+}
+
+/** Fração assistida (0..1) a partir de `playhead` (s) e da duração; null se não der para saber. */
+function progressOf(raw: any, meta: any): number | null {
+  if (raw?.fully_watched === true) return 1;
+  const played = Number(raw?.playhead);
+  const total = Number(meta?.duration_ms) / 1000;
+  if (!Number.isFinite(played) || !Number.isFinite(total) || total <= 0) return null;
+  return Math.max(0, Math.min(1, played / total));
 }
 
 const time = (iso: string | null | undefined): number => {
@@ -257,4 +269,52 @@ export function slimForStorage(episodes: Episode[]): Episode[] {
     seen.add(e.seriesId);
     return e;
   });
+}
+
+/** Um cartão do "Continuar assistindo": o episódio mais recente de cada série. */
+export interface ContinueItem {
+  seriesId: string;
+  seriesTitle: string;
+  episodeId: string;
+  episodeNumber: number | null;
+  episodeTitle: string | null;
+  coverUrl: string | null;
+  /** Lançamento do episódio (ISO) ou, sem essa informação, quando foi assistido. */
+  releasedAt: string | null;
+  /** true se `releasedAt` é o lançamento de verdade (e não a data em que foi assistido). */
+  hasRelease: boolean;
+  watchedAt: string | null;
+  progress: number | null;
+}
+
+/**
+ * Fila "continuar assistindo", como na Crunchyroll: um item por série (o episódio assistido mais
+ * recentemente), ordenado pelo LANÇAMENTO do episódio, do mais novo para o mais antigo. Quando a
+ * API não informa o lançamento, usa a data em que foi assistido.
+ */
+export function continueWatching(episodes: Episode[], limit = 20): ContinueItem[] {
+  const latest = new Map<string, Episode>();
+  for (const e of episodes) {
+    const cur = latest.get(e.seriesId);
+    if (!cur || time(e.watchedAt) > time(cur.watchedAt)) latest.set(e.seriesId, e);
+  }
+  const items: ContinueItem[] = [...latest.values()].map((e) => {
+    const hasRelease = time(e.airedAt) !== 0;
+    return {
+      seriesId: e.seriesId,
+      seriesTitle: e.seriesTitle,
+      episodeId: e.episodeId,
+      episodeNumber: e.episodeNumber,
+      episodeTitle: e.episodeTitle,
+      coverUrl: e.coverUrl,
+      releasedAt: hasRelease ? (e.airedAt ?? null) : e.watchedAt,
+      hasRelease,
+      watchedAt: e.watchedAt,
+      progress: e.progress ?? null,
+    };
+  });
+  items.sort(
+    (a, b) => time(b.releasedAt) - time(a.releasedAt) || time(b.watchedAt) - time(a.watchedAt),
+  );
+  return items.slice(0, limit);
 }

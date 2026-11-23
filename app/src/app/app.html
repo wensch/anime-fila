@@ -454,6 +454,79 @@
             Atualizando… (remoção liberada em instantes)
           </p>
         }
+        @if (continueItems().length > 0 && !hasFilters() && !selectMode()) {
+          <section class="mb-4" aria-labelledby="continue-title">
+            <div class="mb-2 flex items-baseline justify-between gap-2">
+              <h2 id="continue-title" class="text-base font-semibold">Continuar assistindo</h2>
+              <span class="text-xs text-zinc-400">lançamentos mais novos primeiro</span>
+            </div>
+            <ul
+              class="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none]"
+            >
+              @for (c of continueItems(); track c.seriesId) {
+                <li class="w-[15.5rem] shrink-0 snap-start">
+                  <button
+                    type="button"
+                    class="group block w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-left"
+                    [attr.aria-label]="
+                      c.seriesTitle +
+                      (c.episodeNumber !== null ? ', episódio ' + c.episodeNumber : '') +
+                      '. Ver episódios'
+                    "
+                    (click)="showSeriesEpisodes(c.seriesId, c.seriesTitle)"
+                  >
+                    <div class="relative aspect-video bg-zinc-800">
+                      @if (continueSrc(c); as src) {
+                        <img
+                          [src]="src"
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          class="h-full w-full object-cover"
+                        />
+                      } @else {
+                        <div
+                          class="flex h-full w-full items-center justify-center text-3xl font-bold text-zinc-600"
+                          aria-hidden="true"
+                        >
+                          {{ c.seriesTitle.charAt(0) }}
+                        </div>
+                      }
+                      <div
+                        class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 pb-2 pt-8"
+                      >
+                        @if (c.episodeNumber !== null) {
+                          <span class="text-xs font-semibold text-white">
+                            Ep. {{ c.episodeNumber }}
+                          </span>
+                        }
+                      </div>
+                      @if (c.progress !== null) {
+                        <div class="absolute inset-x-0 bottom-0 h-1 bg-zinc-700/80">
+                          <div
+                            class="h-full bg-orange-500"
+                            [style.width.%]="c.progress * 100"
+                          ></div>
+                        </div>
+                      }
+                    </div>
+                    <div class="space-y-0.5 p-3">
+                      <p class="line-clamp-1 text-sm font-semibold leading-tight">
+                        {{ c.seriesTitle }}
+                      </p>
+                      <p class="text-xs text-zinc-400">
+                        {{ c.hasRelease ? 'Lançado' : 'Visto' }}
+                        <span [attr.title]="c.releasedAt | date: 'dd/MM/yyyy HH:mm'">{{
+                          relative(c.releasedAt)
+                        }}</span>
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              }
+            </ul>
+          </section>
+        }
         @if (visibleSeries().length === 0) {
           <div class="flex flex-col items-center gap-3 py-10 text-center text-zinc-400">
             <p>{{ loaded() ? 'Nenhuma série encontrada.' : '' }}</p>

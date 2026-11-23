@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EMPTY_FILTERS,
   coverageGap,
+  continueWatching,
   coverageStart,
   filterEpisodes,
   filterSeries,
@@ -291,5 +292,75 @@ describe('slimForStorage', () => {
     const e = (id: string, sid: string) => ({ ...ep(id, sid, null), coverUrl: 'http://x/' + id });
     const out = slimForStorage([e('1', 'A'), e('2', 'A'), e('3', 'B')]);
     expect(out.map((x) => x.coverUrl)).toEqual(['http://x/1', null, 'http://x/3']);
+  });
+});
+
+describe('continuar assistindo', () => {
+  const withRelease = (
+    id: string,
+    sid: string,
+    watched: string,
+    aired: string | null,
+    num = 1,
+  ) => ({
+    ...ep(id, sid, watched, num),
+    airedAt: aired,
+  });
+
+  it('um item por série: o episódio assistido mais recentemente', () => {
+    const out = continueWatching([
+      withRelease('a1', 'A', '2026-09-01T00:00:00Z', '2026-08-01T00:00:00Z', 1),
+      withRelease('a2', 'A', '2026-09-05T00:00:00Z', '2026-08-08T00:00:00Z', 2),
+      withRelease('b1', 'B', '2026-09-03T00:00:00Z', '2026-09-02T00:00:00Z', 7),
+    ]);
+    expect(out.map((c) => c.episodeId).sort()).toEqual(['a2', 'b1']);
+  });
+
+  it('ordena pelo lançamento do episódio, o mais novo primeiro (não pela data assistida)', () => {
+    const out = continueWatching([
+      withRelease('velho', 'A', '2026-09-30T00:00:00Z', '2026-01-01T00:00:00Z'), // visto agora, lançado antigo
+      withRelease('novo', 'B', '2026-09-01T00:00:00Z', '2026-09-28T00:00:00Z'), // visto antes, lançado agora
+    ]);
+    expect(out.map((c) => c.episodeId)).toEqual(['novo', 'velho']);
+    expect(out.every((c) => c.hasRelease)).toBe(true);
+  });
+
+  it('sem data de lançamento usa a data assistida e avisa que não é lançamento', () => {
+    const out = continueWatching([
+      ep('x', 'X', '2026-09-10T00:00:00Z'),
+      withRelease('y', 'Y', '2026-09-01T00:00:00Z', '2026-09-20T00:00:00Z'),
+    ]);
+    expect(out.map((c) => c.episodeId)).toEqual(['y', 'x']);
+    expect(out[1].hasRelease).toBe(false);
+    expect(out[1].releasedAt).toBe('2026-09-10T00:00:00Z');
+  });
+
+  it('respeita o limite', () => {
+    const eps = Array.from({ length: 30 }, (_, i) => ep('e' + i, 'S' + i, '2026-09-01T00:00:00Z'));
+    expect(continueWatching(eps, 20)).toHaveLength(20);
+  });
+
+  it('normaliza lançamento e progresso do item do histórico', () => {
+    const base = raw('p1', 'S', '2026-09-01T00:00:00Z');
+    const item = (extra: object, meta: object = {}) =>
+      normalizeHistoryItem({
+        ...base,
+        ...extra,
+        panel: {
+          ...base.panel,
+          episode_metadata: { ...base.panel.episode_metadata, duration_ms: 1_400_000, ...meta },
+        },
+      })!;
+    expect(item({ playhead: 700 }).progress).toBeCloseTo(0.5);
+    expect(item({ playhead: 9999 }).progress).toBe(1);
+    expect(item({ fully_watched: true }).progress).toBe(1);
+    expect(item({}).progress).toBeNull();
+    expect(item({}, { episode_air_date: '2026-08-15T00:00:00Z' }).airedAt).toBe(
+      '2026-08-15T00:00:00Z',
+    );
+    expect(item({}, { premium_available_date: '2026-08-10T00:00:00Z' }).airedAt).toBe(
+      '2026-08-10T00:00:00Z',
+    );
+    expect(item({}).airedAt).toBeNull();
   });
 });
