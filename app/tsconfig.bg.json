@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": "./out-tsc/bg", "types": [] },
+  "files": ["src/app/bg-sync.ts"]
+}

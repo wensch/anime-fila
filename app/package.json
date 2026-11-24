@@ -10,7 +10,8 @@
     "cap:sync": "ng build && cap sync android",
     "cap:open": "cap open android",
     "format": "prettier --write \"src/**/*.{ts,html,css}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,html,css}\""
+    "format:check": "prettier --check \"src/**/*.{ts,html,css}\"",
+    "build:bg": "tsc --noEmit -p tsconfig.bg.json && esbuild src/app/bg-sync.ts --bundle --format=iife --global-name=CSBG --target=es2019 --minify --outfile=android/app/src/main/assets/bg-sync.js"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

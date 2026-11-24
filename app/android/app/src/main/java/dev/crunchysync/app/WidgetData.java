@@ -70,11 +70,19 @@ final class WidgetData {
             o.put("image", it.image == null ? JSONObject.NULL : it.image);
             arr.put(o);
         }
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ITEMS, arr.toString()).apply();
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_ITEMS, arr.toString())
+                .putLong("savedAt", System.currentTimeMillis())
+                .apply();
+    }
+
+    /** Quando a lista dos widgets foi atualizada pela última vez (ms); 0 = nunca. */
+    static long savedAt(Context ctx) {
+        return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("savedAt", 0L);
     }
 
     static void clear(Context ctx) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_ITEMS).apply();
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_ITEMS).remove("savedAt").apply();
     }
 
     /** Mesma regra do app: "agora", "há 5 min", "há 3 h", "ontem", "há 4 dias", "há 2 semanas"... */

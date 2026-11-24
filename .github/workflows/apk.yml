@@ -36,6 +36,8 @@ jobs:
         run: echo "export const BUILD_NUMBER = ${{ github.run_number }};" > src/app/build-info.ts
       - run: npx ng build
       - run: npx cap sync android
+      # Código de atualização dos widgets em segundo plano (o WebView escondido executa este arquivo).
+      - run: npm run build:bg
 
       # Opcional: com o secret ANDROID_KEYSTORE_BASE64 (+ _PASSWORD e ANDROID_KEY_ALIAS) o APK
       # sai sempre com a mesma assinatura e pode ser instalado por cima da versão anterior.

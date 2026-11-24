@@ -96,3 +96,15 @@ export function parseSeriesLink(url: string | null | undefined): string | null {
     return null;
   }
 }
+
+/** O que o plugin Android guarda para atualizar os widgets sozinho, sem o app aberto. */
+export interface WidgetSyncConfig {
+  baseUrl: string;
+  basicAuth: string;
+  historyPath: string;
+  seasonsPath: string;
+  episodesPath: string;
+  locale: string;
+  accountId: string | null;
+  deviceId: string;
+}

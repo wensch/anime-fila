@@ -54,6 +54,7 @@ import {
   WIDGET_STYLE_LABEL,
   WidgetSize,
   WidgetStyle,
+  WidgetSyncConfig,
   parseSeriesLink,
   toWidgetPayload,
   widgetCount,
@@ -194,6 +195,7 @@ export class App {
     );
   });
   private lastWidgetKey = '';
+  private lastRefreshAt = 0;
   /** Próximo episódio de cada série (some da fila quem terminou ou está em dia). */
   protected readonly nextStates = signal<Record<string, NextState>>(this.settings.loadNext());
   private resolvingQueue = false;
@@ -293,10 +295,24 @@ export class App {
       }
       if (!this.loaded()) return;
       const items = this.widgetItems();
-      const key = JSON.stringify(items);
+      const cfg = this.settings.config();
+      const config: WidgetSyncConfig = {
+        baseUrl: cfg.baseUrl,
+        basicAuth: cfg.basicAuth,
+        historyPath: cfg.historyPath,
+        seasonsPath: cfg.seasonsPath,
+        episodesPath: cfg.episodesPath,
+        locale: cfg.locale,
+        accountId: this.settings.session()?.accountId ?? null,
+        deviceId: this.settings.deviceId,
+      };
+      const key = JSON.stringify([items, config]);
       if (key === this.lastWidgetKey) return;
       this.lastWidgetKey = key;
-      void HomeWidget.update({ items }).catch(() => (this.lastWidgetKey = ''));
+      // `config` deixa o Android atualizar os widgets sozinho, sem o app aberto.
+      void HomeWidget.update({ items, config, next: this.nextStates() }).catch(
+        () => (this.lastWidgetKey = ''),
+      );
     });
     // Toque num widget: crunchysync://series/<id> abre os episódios da série.
     if (Capacitor.isNativePlatform()) {
@@ -317,7 +333,9 @@ export class App {
     void this.coverCache.init(); // lê as capas do disco (também num primeiro login)
     void this.update.check(); // Ao voltar ao app (vindo de outro), confere de novo se há versão nova.
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') void this.update.checkIfDue();
+      if (document.visibilityState !== 'visible') return;
+      void this.update.checkIfDue();
+      this.refreshIfStale();
     });
     if (this.loggedIn()) {
       // Mostra na hora a última lista guardada e atualiza por trás.
@@ -382,6 +400,7 @@ export class App {
       this.episodes.set(mergeArchive(scan.episodes, this.episodes(), scan.capped, ARCHIVE_MAX));
       this.mayHaveMore.set(scan.capped);
       this.settings.saveHistoryCache(this.episodes());
+      this.lastRefreshAt = Date.now();
       this.loaded.set(true);
       this.selected.set(new Set());
       this.selectedSeries.set(new Set());
@@ -486,6 +505,23 @@ export class App {
   private onLink(url: string | null | undefined): void {
     const id = parseSeriesLink(url);
     if (id !== null) this.pendingSeries.set(id);
+  }
+
+  /**
+   * Ao voltar para o app (por exemplo, depois de assistir na Crunchyroll), atualiza sozinho se a
+   * lista tem mais de 3 minutos; não mexe se você está no meio de uma seleção ou remoção.
+   */
+  private refreshIfStale(): void {
+    const idle =
+      !this.loading() &&
+      !this.removing() &&
+      !this.scanning() &&
+      !this.pending() &&
+      !this.selectMode() &&
+      this.selected().size === 0;
+    if (this.loggedIn() && idle && Date.now() - this.lastRefreshAt > 3 * 60_000) {
+      void this.refresh();
+    }
   }
 
   /** Imagem do cartão do "Continuar assistindo": miniatura do episódio ou capa da série. */

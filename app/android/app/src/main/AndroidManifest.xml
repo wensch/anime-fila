@@ -68,6 +68,12 @@
                 android:resource="@xml/widget_list_info" />
         </receiver>
 
+        <!-- Atualização periódica da fila dos widgets, feita pelo sistema. -->
+        <service
+            android:name=".RefreshJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -87,6 +93,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Mantém a atualização periódica dos widgets agendada depois de reiniciar o celular. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Necessária para o app abrir o instalador do próprio APK de atualização. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

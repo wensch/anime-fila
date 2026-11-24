@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
 import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -42,42 +43,56 @@ public class HomeWidgetPlugin extends Plugin {
             return;
         }
         final Context ctx = getContext().getApplicationContext();
+        final JSObject config = call.getObject("config");
+        final JSObject next = call.getObject("next");
         new Thread(() -> {
             try {
-                File dir = new File(ctx.getFilesDir(), "widget");
-                //noinspection ResultOfMethodCallIgnored
-                dir.mkdirs();
-                List<WidgetData.Item> out = new ArrayList<>();
-                Set<String> keep = new HashSet<>();
-                int n = Math.min(arr.length(), MAX_ITEMS);
-                for (int i = 0; i < n; i++) {
-                    JSONObject o = arr.getJSONObject(i);
-                    WidgetData.Item it = new WidgetData.Item();
-                    it.seriesId = o.optString("seriesId", "");
-                    it.episodeId = o.optString("episodeId", "");
-                    it.title = o.optString("title", "");
-                    it.episode = o.optString("episode", "");
-                    it.releasedAt = o.isNull("releasedAt") ? 0L : o.optLong("releasedAt", 0L);
-                    it.hasRelease = o.optBoolean("hasRelease", false);
-                    it.progress = o.isNull("progress") ? -1f : (float) o.optDouble("progress", -1.0);
-                    it.image = o.isNull("coverUrl") ? null : fetchImage(dir, o.optString("coverUrl", ""));
-                    if (it.image != null) keep.add(it.image);
-                    out.add(it);
+                if (config != null) {
+                    // Guarda o necessário para atualizar em segundo plano, sem o app aberto.
+                    SyncStore.saveConfig(ctx, config.toString());
+                    SyncStore.setStatus(ctx, "ok"); // o app está logado: sai o aviso de sessão expirada
+                    if (next != null && SyncStore.lastOk(ctx) == 0L) SyncStore.saveNext(ctx, next.toString());
+                    RefreshJobService.ensureScheduled(ctx);
                 }
-                File[] old = dir.listFiles();
-                if (old != null) {
-                    for (File f : old) {
-                        //noinspection ResultOfMethodCallIgnored
-                        if (!keep.contains(f.getName())) f.delete();
-                    }
-                }
-                WidgetData.save(ctx, out);
-                BaseContinueProvider.renderAll(ctx);
+                apply(ctx, arr);
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Falha ao atualizar os widgets: " + e.getMessage());
             }
         }, "home-widget").start();
+    }
+
+    /** Baixa as miniaturas, guarda a lista e redesenha os widgets (usado pelo app e pelo segundo plano). */
+    static void apply(Context ctx, org.json.JSONArray arr) throws Exception {
+        File dir = new File(ctx.getFilesDir(), "widget");
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        List<WidgetData.Item> out = new ArrayList<>();
+        Set<String> keep = new HashSet<>();
+        int n = Math.min(arr.length(), MAX_ITEMS);
+        for (int i = 0; i < n; i++) {
+            JSONObject o = arr.getJSONObject(i);
+            WidgetData.Item it = new WidgetData.Item();
+            it.seriesId = o.optString("seriesId", "");
+            it.episodeId = o.optString("episodeId", "");
+            it.title = o.optString("title", "");
+            it.episode = o.optString("episode", "");
+            it.releasedAt = o.isNull("releasedAt") ? 0L : o.optLong("releasedAt", 0L);
+            it.hasRelease = o.optBoolean("hasRelease", false);
+            it.progress = o.isNull("progress") ? -1f : (float) o.optDouble("progress", -1.0);
+            it.image = o.isNull("coverUrl") ? null : fetchImage(dir, o.optString("coverUrl", ""));
+            if (it.image != null) keep.add(it.image);
+            out.add(it);
+        }
+        File[] old = dir.listFiles();
+        if (old != null) {
+            for (File f : old) {
+                //noinspection ResultOfMethodCallIgnored
+                if (!keep.contains(f.getName())) f.delete();
+            }
+        }
+        WidgetData.save(ctx, out);
+        BaseContinueProvider.renderAll(ctx);
     }
 
     /** Esvazia os widgets (ao sair da conta). */
@@ -93,6 +108,8 @@ public class HomeWidgetPlugin extends Plugin {
             }
         }
         WidgetData.clear(ctx);
+        SyncStore.clear(ctx);
+        RefreshJobService.cancel(ctx);
         BaseContinueProvider.renderAll(ctx);
         call.resolve();
     }

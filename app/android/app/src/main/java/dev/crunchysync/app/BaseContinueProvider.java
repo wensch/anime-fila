@@ -24,6 +24,11 @@ import java.util.List;
  * redesenha (atualiza o "Lançado há…").
  */
 public abstract class BaseContinueProvider extends AppWidgetProvider {
+    /** Toque no botão de atualizar do widget. */
+    static final String ACTION_REFRESH = "dev.crunchysync.app.REFRESH_WIDGETS";
+    /** Tempo máximo de uma atualização iniciada por broadcast (o sistema dá ~60 s antes de acusar travamento). */
+    private static final long RECEIVER_TIMEOUT_MS = 45_000L;
+
     /** Layout do estilo. */
     protected abstract int layoutId();
 
@@ -35,6 +40,26 @@ public abstract class BaseContinueProvider extends AppWidgetProvider {
 
     /** Hook para o estilo ajustar cliques extras depois do desenho padrão. */
     protected void afterBind(Context ctx, RemoteViews v, List<WidgetData.Item> items, int visible) {}
+
+    @Override
+    public void onReceive(Context ctx, Intent intent) {
+        String action = intent == null ? null : intent.getAction();
+        if (ACTION_REFRESH.equals(action)) {
+            // Botão de atualizar: busca agora, sem o app aberto.
+            final PendingResult pr = goAsync();
+            BackgroundSync.start(ctx, true, RECEIVER_TIMEOUT_MS, pr::finish);
+            return;
+        }
+        if (AppWidgetManager.ACTION_APPWIDGET_UPDATE.equals(action)) {
+            // O Android redesenha os widgets de tempos em tempos: aproveita para buscar dados novos.
+            RefreshJobService.ensureScheduled(ctx);
+            super.onReceive(ctx, intent);
+            final PendingResult pr = goAsync();
+            BackgroundSync.start(ctx, false, RECEIVER_TIMEOUT_MS, pr::finish);
+            return;
+        }
+        super.onReceive(ctx, intent);
+    }
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
@@ -70,6 +95,8 @@ public abstract class BaseContinueProvider extends AppWidgetProvider {
         v.setViewVisibility(R.id.content, empty ? View.GONE : View.VISIBLE);
         v.setViewVisibility(R.id.tv_empty, empty ? View.VISIBLE : View.GONE);
         v.setOnClickPendingIntent(android.R.id.background, link(ctx, null));
+        v.setOnClickPendingIntent(R.id.btn_refresh, refreshIntent(ctx));
+        v.setTextViewText(R.id.tv_updated, updatedLabel(ctx));
 
         long now = System.currentTimeMillis();
         for (int i = 0; i < maxSlots(); i++) {
@@ -91,6 +118,34 @@ public abstract class BaseContinueProvider extends AppWidgetProvider {
         }
         afterBind(ctx, v, items, visible);
         mgr.updateAppWidget(id, v);
+    }
+
+    private PendingIntent refreshIntent(Context ctx) {
+        Intent i = new Intent(ctx, getClass());
+        i.setAction(ACTION_REFRESH);
+        return PendingIntent.getBroadcast(ctx, 1, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    /** "Atualizado há 3 min", ou o aviso de que é preciso entrar de novo no app. */
+    private static String updatedLabel(Context ctx) {
+        if ("session".equals(SyncStore.status(ctx))) return "Entre de novo no app";
+        long at = WidgetData.savedAt(ctx);
+        return at <= 0 ? "" : "Atualizado " + WidgetData.relative(at, System.currentTimeMillis());
+    }
+
+    /** Mostra "Atualizando…" em todos os widgets enquanto a busca manual roda. */
+    static void setBusy(Context ctx) {
+        AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+        BaseContinueProvider[] providers = {
+                new HeroWidgetProvider(), new CarouselWidgetProvider(), new ListWidgetProvider()
+        };
+        for (BaseContinueProvider p : providers) {
+            int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, p.getClass()));
+            if (ids == null || ids.length == 0) continue;
+            RemoteViews v = new RemoteViews(ctx.getPackageName(), p.layoutId());
+            v.setTextViewText(R.id.tv_updated, "Atualizando…");
+            mgr.partiallyUpdateAppWidget(ids, v);
+        }
     }
 
     private static String subtitle(WidgetData.Item it, long now) {

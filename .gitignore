@@ -9,3 +9,6 @@ app/android/app/src/main/assets/public/
 app/android/capacitor-cordova-android-plugins/
 *.keystore
 *.jks
+
+# gerado por "npm run build:bg" (empacota src/app/bg-sync.ts para o WebView em segundo plano)
+app/android/app/src/main/assets/bg-sync.js
