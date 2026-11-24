@@ -13,6 +13,8 @@ export interface ApiConfig {
   deletePath: string;
   /** Metadados (com imagens) de séries; {ids} = ids separados por vírgula. */
   objectsPath: string;
+  /** Lista "Continuar assistindo" da própria Crunchyroll ({account}). */
+  watchlistPath: string;
   /** Temporadas de uma série ({id}); dá a lista completa de episódios, mesmo fora do histórico. */
   seasonsPath: string;
   /** Episódios de uma temporada ({id}). */
@@ -28,6 +30,7 @@ export const DEFAULT_CONFIG: ApiConfig = {
   historyPath: '/content/v2/{account}/watch-history',
   deletePath: '/content/v2/{account}/watch-history/{id}',
   objectsPath: '/content/v2/cms/objects/{ids}',
+  watchlistPath: '/content/v2/discover/{account}/watchlist',
   seasonsPath: '/content/v2/cms/series/{id}/seasons',
   episodesPath: '/content/v2/cms/seasons/{id}/episodes',
   locale: 'pt-BR',

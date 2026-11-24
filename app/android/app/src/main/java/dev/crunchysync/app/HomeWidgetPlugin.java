@@ -95,6 +95,29 @@ public class HomeWidgetPlugin extends Plugin {
         BaseContinueProvider.renderAll(ctx);
     }
 
+    /** Como está a atualização em segundo plano (para o Diagnóstico do app). */
+    @PluginMethod
+    public void syncStatus(PluginCall call) {
+        call.resolve(status(getContext().getApplicationContext()));
+    }
+
+    /** Roda a atualização em segundo plano agora e devolve o resultado. */
+    @PluginMethod
+    public void syncNow(final PluginCall call) {
+        final Context ctx = getContext().getApplicationContext();
+        BackgroundSync.start(ctx, true, 100_000L, () -> call.resolve(status(ctx)));
+    }
+
+    private static JSObject status(Context ctx) {
+        JSObject o = new JSObject();
+        o.put("configured", SyncStore.config(ctx) != null);
+        o.put("lastOk", SyncStore.lastOk(ctx));
+        o.put("lastAttempt", SyncStore.lastAttempt(ctx));
+        o.put("lastError", SyncStore.lastError(ctx));
+        o.put("source", SyncStore.source(ctx));
+        return o;
+    }
+
     /** Esvazia os widgets (ao sair da conta). */
     @PluginMethod
     public void clear(PluginCall call) {

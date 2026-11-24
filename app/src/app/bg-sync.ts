@@ -23,11 +23,14 @@ import {
   normalizeSeasons,
 } from './queue';
 import { WidgetPushItem, toWidgetPayload } from './widget';
+import { normalizeWatchlist } from './watchlist';
 
 export interface BgConfig {
   baseUrl: string;
   basicAuth: string;
   historyPath: string;
+  /** Lista "Continuar assistindo" da Crunchyroll; vazio = só o histórico. */
+  watchlistPath?: string;
   seasonsPath: string;
   episodesPath: string;
   locale: string;
@@ -43,6 +46,8 @@ export interface BgResult {
   items: WidgetPushItem[];
   next: Record<string, NextState>;
   accountId: string;
+  /** De onde veio a lista: a da própria Crunchyroll ou montada a partir do histórico. */
+  source: 'watchlist' | 'history';
 }
 
 /** SESSION = a sessão da Crunchyroll caiu (é preciso entrar de novo no app). */
@@ -123,7 +128,30 @@ export async function run(cfg: BgConfig, deps?: Partial<BgDeps>): Promise<BgResu
     }
   };
 
-  // 2) Histórico recente.
+  // 2) A lista "Continuar assistindo" da própria Crunchyroll, quando ela responde no formato esperado.
+  if (cfg.watchlistPath) {
+    try {
+      const body = await get(fill(cfg.watchlistPath, { account: accountId }), {
+        n: '100',
+        order: 'desc',
+        locale: cfg.locale,
+      });
+      const queue = normalizeWatchlist(body);
+      if (queue !== null) {
+        return {
+          items: toWidgetPayload(queue),
+          next: cfg.next ?? {},
+          accountId,
+          source: 'watchlist',
+        };
+      }
+    } catch (err) {
+      if (err instanceof BgError && err.code === 'SESSION') throw err;
+      // indisponível: segue com o histórico
+    }
+  }
+
+  // 3) Plano B: histórico recente.
   const byId = new Map<string, Episode>();
   const historyPath = fill(cfg.historyPath, { account: accountId });
   for (let page = 1; page <= HISTORY_PAGES; page++) {
@@ -142,7 +170,7 @@ export async function run(cfg: BgConfig, deps?: Partial<BgDeps>): Promise<BgResu
   const episodes = [...byId.values()];
   const latest = latestPerSeries(episodes).slice(0, QUEUE_CANDIDATES);
 
-  // 3) Próximo episódio das séries cujo último episódio já terminou (com resultado guardado).
+  // 4) Próximo episódio das séries cujo último episódio já terminou (com resultado guardado).
   const next: Record<string, NextState> = {};
   for (const e of latest) if (cfg.next?.[e.seriesId]) next[e.seriesId] = cfg.next[e.seriesId];
   const todo = latest
@@ -182,6 +210,11 @@ export async function run(cfg: BgConfig, deps?: Partial<BgDeps>): Promise<BgResu
   };
   await Promise.all(Array.from({ length: QUEUE_CONCURRENCY }, () => worker()));
 
-  // 4) Fila final, no formato dos widgets.
-  return { items: toWidgetPayload(continueWatching(episodes, 10, next)), next, accountId };
+  // 5) Fila final, no formato dos widgets.
+  return {
+    items: toWidgetPayload(continueWatching(episodes, 10, next)),
+    next,
+    accountId,
+    source: 'history',
+  };
 }

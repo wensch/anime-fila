@@ -40,6 +40,9 @@ const baseCfg = (next: Record<string, NextState> = {}): BgConfig => ({
 
 interface World {
   history: unknown[];
+  /** corpo (ou status) da lista "Continuar assistindo" da Crunchyroll */
+  watchlist?: unknown;
+  watchlistStatus?: number;
   /** seriesId -> próximo episódio (ou ausente = terminou) */
   nextOf: Record<string, { id: string; n: number; daysAgo: number } | undefined>;
   tokenStatus?: number;
@@ -58,6 +61,11 @@ function fakeFetch(w: World) {
       return w.tokenStatus && w.tokenStatus !== 200
         ? json({}, w.tokenStatus)
         : json({ access_token: 't', account_id: 'acc' });
+    }
+    if (url.pathname.endsWith('/watchlist')) {
+      return w.watchlistStatus && w.watchlistStatus !== 200
+        ? json({}, w.watchlistStatus)
+        : json(w.watchlist ?? {});
     }
     if (url.pathname.endsWith('/watch-history')) return json({ data: w.history });
     let m = url.pathname.match(/series\/(.+)\/seasons$/);
@@ -176,5 +184,64 @@ describe('atualização em segundo plano (bg-sync)', () => {
     await run(baseCfg(), deps(f));
     const seasonCalls = calls.filter((c) => c.path.endsWith('/seasons')).length;
     expect(seasonCalls).toBe(12);
+  });
+});
+
+describe('fonte: lista da Crunchyroll', () => {
+  const withList = (): BgConfig => ({
+    ...baseCfg(),
+    watchlistPath: '/content/v2/discover/{account}/watchlist',
+  });
+  const entry = (sid: string, over: Record<string, unknown> = {}) => ({
+    fully_watched: false,
+    playhead: 0,
+    panel: {
+      id: `w-${sid}`,
+      title: `Ep ${sid}`,
+      episode_metadata: {
+        series_id: sid,
+        series_title: `Série ${sid}`,
+        episode_number: 4,
+        duration_ms: 1_400_000,
+        premium_available_date: iso(1),
+      },
+      images: {},
+    },
+    ...over,
+  });
+
+  it('usa a lista da Crunchyroll e nem consulta histórico nem catálogo', async () => {
+    const { f, calls } = fakeFetch({
+      history: [hist('A', 1)],
+      nextOf: {},
+      watchlist: { data: [entry('X'), entry('Y', { fully_watched: true })] },
+    });
+    const r = await run(withList(), deps(f));
+    expect(r.source).toBe('watchlist');
+    expect(r.items.map((i) => i.seriesId)).toEqual(['X']); // Y já terminou
+    expect(calls.some((c) => c.path.endsWith('/watch-history'))).toBe(false);
+    expect(calls.some((c) => c.path.includes('/cms/'))).toBe(false);
+  });
+
+  it('lista vazia da Crunchyroll vale: nada para continuar (não volta ao histórico)', async () => {
+    const { f } = fakeFetch({ history: [hist('A', 1)], nextOf: {}, watchlist: { data: [] } });
+    const r = await run(withList(), deps(f));
+    expect(r.items).toEqual([]);
+    expect(r.source).toBe('watchlist');
+  });
+
+  it('erro ou formato inesperado: cai no histórico (plano B)', async () => {
+    for (const w of [{ watchlistStatus: 404 }, { watchlist: { oops: true } }]) {
+      const { f } = fakeFetch({ history: [hist('A', 1, { playhead: 300 })], nextOf: {}, ...w });
+      const r = await run(withList(), deps(f));
+      expect(r.source).toBe('history');
+      expect(r.items.map((i) => i.seriesId)).toEqual(['A']);
+    }
+  });
+
+  it('sessão expirada na lista vira erro de sessão', async () => {
+    const { f } = fakeFetch({ history: [], nextOf: {}, watchlistStatus: 401 });
+    const err = await run(withList(), deps(f)).catch((e) => e);
+    expect((err as BgError).code).toBe('SESSION');
   });
 });

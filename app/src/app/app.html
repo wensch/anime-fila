@@ -106,6 +106,19 @@
         <button
           type="button"
           class="btn w-full"
+          [disabled]="syncingWidgets() || !loggedIn()"
+          (click)="syncWidgetsNow()"
+        >
+          {{ syncingWidgets() ? 'Atualizando widgets…' : 'Atualizar os widgets agora' }}
+        </button>
+        <p class="text-xs text-zinc-400">
+          Faz a mesma busca em segundo plano dos widgets e mostra o resultado no registro acima.
+        </p>
+      </div>
+      <div class="mt-3 space-y-1">
+        <button
+          type="button"
+          class="btn w-full"
           [disabled]="probing() || !loggedIn()"
           (click)="probeApi()"
         >
@@ -131,6 +144,7 @@
               historyPath: hp.value,
               deletePath: dp.value,
               objectsPath: op.value,
+              watchlistPath: wp.value,
               locale: lc.value,
             })
           "
@@ -155,6 +169,12 @@
               #op
               class="field"
               [value]="settings.config().objectsPath"
+          /></label>
+          <label class="block"
+            >Caminho da lista "Continuar assistindo"<input
+              #wp
+              class="field"
+              [value]="settings.config().watchlistPath"
           /></label>
           <label class="block"
             >Idioma<input #lc class="field" [value]="settings.config().locale"

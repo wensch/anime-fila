@@ -1,4 +1,5 @@
 import type { ContinueItem } from './history';
+import { relativeTime } from './text';
 
 /** Aparência do widget "Continuar assistindo": estilo e tamanho escolhidos pelo usuário. */
 export const WIDGET_STYLES = ['carousel', 'list', 'hero'] as const;
@@ -102,9 +103,36 @@ export interface WidgetSyncConfig {
   baseUrl: string;
   basicAuth: string;
   historyPath: string;
+  watchlistPath: string;
   seasonsPath: string;
   episodesPath: string;
   locale: string;
   accountId: string | null;
   deviceId: string;
+}
+
+/** Estado da atualização em segundo plano dos widgets (vem do plugin Android). */
+export interface SyncStatus {
+  /** O Android já tem a configuração guardada. */
+  configured: boolean;
+  /** Última atualização que funcionou (ms; 0 = nunca). */
+  lastOk: number;
+  /** Última tentativa (ms; 0 = nunca). */
+  lastAttempt: number;
+  /** Motivo da última falha ("" = sem falha). */
+  lastError: string;
+  /** "watchlist" (lista da Crunchyroll), "history" (montada do histórico) ou "". */
+  source: string;
+}
+
+/** Frase para o Diagnóstico. */
+export function describeSync(s: SyncStatus, now = Date.now()): string {
+  const ago = (t: number) => (t <= 0 ? 'nunca' : relativeTime(new Date(t).toISOString(), now));
+  const source =
+    s.source === 'watchlist'
+      ? 'lista da Crunchyroll'
+      : s.source === 'history'
+        ? 'histórico (plano B)'
+        : 'ainda sem busca';
+  return `fonte: ${source}; última atualização: ${ago(s.lastOk)}; última tentativa: ${ago(s.lastAttempt)}; erro: ${s.lastError || 'nenhum'}`;
 }

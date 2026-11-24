@@ -17,10 +17,10 @@ public class RefreshJobService extends JobService {
     private static final long PERIOD_MS = 30 * 60_000L;
     private static final long JOB_TIMEOUT_MS = 100_000L;
 
-    /** Agenda (ou mantém) a atualização periódica; só se o app já mandou a configuração (há login). */
+    /** Agenda (ou mantém) a atualização periódica; só se há o que atualizar (o app já mandou a configuração ou os widgets já têm lista). */
     static void ensureScheduled(Context ctx) {
         JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        if (js == null || SyncStore.config(ctx) == null) return;
+        if (js == null || !SyncStore.isActive(ctx)) return;
         if (js.getPendingJob(JOB_ID) != null) return;
         ComponentName cn = new ComponentName(ctx, RefreshJobService.class);
         try {

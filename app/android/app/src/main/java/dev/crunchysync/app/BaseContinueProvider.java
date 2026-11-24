@@ -129,6 +129,8 @@ public abstract class BaseContinueProvider extends AppWidgetProvider {
     /** "Atualizado há 3 min", ou o aviso de que é preciso entrar de novo no app. */
     private static String updatedLabel(Context ctx) {
         if ("session".equals(SyncStore.status(ctx))) return "Entre de novo no app";
+        String err = SyncStore.lastError(ctx);
+        if (!err.isEmpty() && SyncStore.lastAttempt(ctx) > SyncStore.lastOk(ctx)) return "Falhou: " + err;
         long at = WidgetData.savedAt(ctx);
         return at <= 0 ? "" : "Atualizado " + WidgetData.relative(at, System.currentTimeMillis());
     }

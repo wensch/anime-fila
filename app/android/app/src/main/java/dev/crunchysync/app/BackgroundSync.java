@@ -34,19 +34,21 @@ final class BackgroundSync {
     private final long timeoutMs;
     private final Runnable onFinish;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final Runnable timeout = () -> finish(false);
+    private final Runnable timeout;
 
     private WebView web;
     private String cfgJson;
     private boolean done = false;
     private boolean started = false;
     private boolean showedBusy = false;
+    private boolean attempted = false;
 
     private BackgroundSync(Context ctx, boolean force, long timeoutMs, Runnable onFinish) {
         this.ctx = ctx.getApplicationContext();
         this.force = force;
         this.timeoutMs = timeoutMs;
         this.onFinish = onFinish;
+        this.timeout = () -> failNow(started ? "a busca demorou demais" : "página da Crunchyroll não abriu (verificação?)");
     }
 
     /**
@@ -63,18 +65,25 @@ final class BackgroundSync {
             onFinish.run(); // já há uma em andamento
             return;
         }
-        cfgJson = SyncStore.config(ctx);
-        long age = System.currentTimeMillis() - SyncStore.lastOk(ctx);
-        if (cfgJson == null || (!force && age < MIN_INTERVAL_MS)) {
+        cfgJson = SyncStore.configOrDefault(ctx);
+        long now = System.currentTimeMillis();
+        if (cfgJson == null) {
+            failNow("sem configuração");
+            return;
+        }
+        // Automática: só se há o que atualizar e faz mais de 10 min da última. Manual: sempre.
+        if (!force && (!SyncStore.isActive(ctx) || now - SyncStore.lastOk(ctx) < MIN_INTERVAL_MS)) {
             finish(false);
             return;
         }
+        attempted = true;
+        SyncStore.setAttempt(ctx, now);
         try {
             JSONObject cfg = new JSONObject(cfgJson);
             String base = cfg.optString("baseUrl", "");
             String host = android.net.Uri.parse(base).getHost();
             if (host == null || !(host.equals("crunchyroll.com") || host.endsWith(".crunchyroll.com"))) {
-                finish(false);
+                failNow("endereço da API inválido");
                 return;
             }
             if (force) {
@@ -96,7 +105,7 @@ final class BackgroundSync {
 
                 @Override
                 public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                    if (request.isForMainFrame()) finish(false); // sem conexão
+                    if (request.isForMainFrame()) failNow("sem conexão com a Crunchyroll");
                 }
 
                 @Override
@@ -107,7 +116,7 @@ final class BackgroundSync {
             });
             web.loadUrl(base + "/");
         } catch (Throwable t) {
-            finish(false);
+            failNow("webview: " + t.getClass().getSimpleName());
         }
     }
 
@@ -137,7 +146,7 @@ final class BackgroundSync {
                     + "function(e){CSNative.fail(String(e&&e.message?e.message:e));});";
             web.evaluateJavascript(js, null);
         } catch (Exception e) {
-            finish(false);
+            failNow("script: " + shorten(e.getMessage()));
         }
     }
 
@@ -149,6 +158,18 @@ final class BackgroundSync {
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
             return out.toString("UTF-8");
         }
+    }
+
+    private static String shorten(String s) {
+        if (s == null) return "erro";
+        return s.length() <= 48 ? s : s.substring(0, 48);
+    }
+
+    /** Registra o motivo da falha (aparece no widget e no Diagnóstico) e encerra. Thread principal. */
+    private void failNow(String reason) {
+        if (done) return;
+        SyncStore.setError(ctx, reason);
+        finish(false);
     }
 
     /** Sempre na thread principal. */
@@ -165,7 +186,7 @@ final class BackgroundSync {
         } catch (Throwable ignored) {
             // WebView já liberado
         }
-        if (showedBusy) BaseContinueProvider.renderAll(ctx); // tira o "Atualizando…"
+        if (attempted) BaseContinueProvider.renderAll(ctx); // tira o "Atualizando…" e mostra o resultado
         RUNNING.set(false);
         onFinish.run();
     }
@@ -183,19 +204,25 @@ final class BackgroundSync {
             }
             SyncStore.setLastOk(ctx, System.currentTimeMillis());
             SyncStore.setStatus(ctx, "ok");
+            SyncStore.setError(ctx, "");
+            SyncStore.setSource(ctx, r.optString("source", ""));
             HomeWidgetPlugin.apply(ctx, items); // baixa as miniaturas, guarda e redesenha os widgets
             main.post(() -> finish(true));
         } catch (Exception e) {
-            main.post(() -> finish(false));
+            final String reason = "salvar: " + shorten(e.getMessage());
+            main.post(() -> failNow(reason));
         }
     }
 
     private void applyFailure(String message) {
+        final String reason;
         if (message != null && message.startsWith("SESSION")) {
             SyncStore.setStatus(ctx, "session"); // o widget avisa para entrar de novo no app
-            BaseContinueProvider.renderAll(ctx);
+            reason = "sessão expirada";
+        } else {
+            reason = shorten(message);
         }
-        main.post(() -> finish(false));
+        main.post(() -> failNow(reason));
     }
 
     /** Ponte chamada pelo JavaScript injetado (em outra thread). */

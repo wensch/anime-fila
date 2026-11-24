@@ -9,7 +9,8 @@ import {
   MAX_RETRIES,
   PAGE_SIZE,
 } from './endpoints';
-import { extractSeriesCovers, normalizeHistoryItem } from './history';
+import { ContinueItem, extractSeriesCovers, normalizeHistoryItem } from './history';
+import { normalizeWatchlist } from './watchlist';
 import { NextEpisode, findNext, normalizeCatalogEpisodes, normalizeSeasons } from './queue';
 import { PageFetch } from './page-fetch';
 import { DeleteOutcome, Episode } from './models';
@@ -227,6 +228,41 @@ export class CrunchyrollService {
     }
     this.diag.log(`catálogo: ${ids.size} episódios (incl. versões) para a série`);
     return [...ids].slice(0, MAX_CATALOG_IDS);
+  }
+
+  /**
+   * Lista "Continuar assistindo" da própria Crunchyroll (o próximo episódio de cada série que você
+   * está vendo). null = indisponível ou em formato inesperado: o app usa o histórico no lugar.
+   */
+  async getWatchlist(): Promise<ContinueItem[] | null> {
+    const cfg = this.settings.config();
+    try {
+      const accountId = await this.accountId();
+      const body: any = await this.authed('GET', fill(cfg.watchlistPath, { account: accountId }), {
+        params: { n: '100', order: 'desc', locale: cfg.locale },
+      });
+      const items = normalizeWatchlist(body);
+      if (items === null) {
+        this.diag.log(
+          `fila: resposta da Crunchyroll em formato inesperado: ${shapeOf(body).slice(0, 300)}`,
+        );
+      } else {
+        const total = body.data.length;
+        this.diag.log(
+          `fila: lista da Crunchyroll: ${items.length} para continuar (de ${total} na lista)`,
+        );
+        if (items.length === 0 && total > 0) {
+          this.diag.log(`fila: formato do 1º item: ${shapeOf(body.data[0]).slice(0, 400)}`);
+        }
+      }
+      return items;
+    } catch (e) {
+      if (e instanceof SessionExpiredError) throw e;
+      this.diag.log(
+        `fila: lista da Crunchyroll indisponível (${(e as Error).message}); usando o histórico`,
+      );
+      return null;
+    }
   }
 
   /**

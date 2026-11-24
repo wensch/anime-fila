@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { Episode } from './models';
-import { slimForStorage } from './history';
+import { ContinueItem, slimForStorage } from './history';
 import type { NextState } from './queue';
 import {
   DEFAULT_WIDGET_SIZE,
@@ -23,6 +23,7 @@ const KEY = 'crunchysync.v2';
 const KEY_COVERS = 'crunchysync.covers';
 const KEY_HISTORY = 'crunchysync.history';
 const KEY_NEXT = 'crunchysync.next';
+const KEY_QUEUE = 'crunchysync.queue';
 
 interface Stored {
   session: Session | null;
@@ -145,6 +146,25 @@ export class SettingsService {
   setWidgetSize(v: WidgetSize): void {
     this.widgetSize.set(v);
     this.persist();
+  }
+
+  /** Última fila "Continuar assistindo" da Crunchyroll: aparece na hora ao abrir, enquanto atualiza. */
+  loadQueue(): ContinueItem[] | null {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY_QUEUE) ?? 'null');
+      return Array.isArray(v) ? v : null;
+    } catch {
+      return null;
+    }
+  }
+
+  saveQueue(items: ContinueItem[] | null): void {
+    try {
+      if (items === null) localStorage.removeItem(KEY_QUEUE);
+      else localStorage.setItem(KEY_QUEUE, JSON.stringify(items));
+    } catch {
+      /* sem armazenamento: busca de novo na próxima abertura */
+    }
   }
 
   /** Próximo episódio de cada série (fila "continuar assistindo"), guardado entre aberturas. */

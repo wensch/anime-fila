@@ -24,6 +24,7 @@ import {
   limitLabel,
 } from './endpoints';
 import {
+  ContinueItem,
   EMPTY_FILTERS,
   Filters,
   SeriesSort,
@@ -55,6 +56,7 @@ import {
   WidgetSize,
   WidgetStyle,
   WidgetSyncConfig,
+  describeSync,
   parseSeriesLink,
   toWidgetPayload,
   widgetCount,
@@ -160,15 +162,33 @@ export class App {
       coverUrl: covers[s.seriesId] ?? s.coverUrl,
     }));
   });
-  /** "Continuar assistindo": um episódio por série, do lançamento mais novo para o mais antigo. */
-  protected readonly continueItems = computed(() => {
+  /** Fila "Continuar assistindo" da própria Crunchyroll (null = indisponível: usa o histórico). */
+  private readonly watchlist = signal<ContinueItem[] | null>(this.settings.loadQueue());
+  /**
+   * "Continuar assistindo": a lista da Crunchyroll (próximo episódio de cada série, sem as terminadas),
+   * ordenada pelo lançamento; se ela não estiver disponível, a fila montada a partir do histórico.
+   */
+  private readonly queueItems = computed<ContinueItem[]>(() => {
     const covers = this.covers();
-    const count = widgetCount(this.settings.widgetStyle(), this.settings.widgetSize());
-    return continueWatching(this.episodes(), count, this.nextStates()).map((c) => ({
-      ...c,
-      coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
-    }));
+    const base = this.watchlist() ?? continueWatching(this.episodes(), 30, this.nextStates());
+    return base.map((c) => ({ ...c, coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null }));
   });
+  protected readonly continueItems = computed(() =>
+    this.queueItems().slice(
+      0,
+      widgetCount(this.settings.widgetStyle(), this.settings.widgetSize()),
+    ),
+  );
+  /** O que vai para os widgets da tela inicial (mesma ordem do "Continuar assistindo"). */
+  private readonly widgetItems = computed(() => toWidgetPayload(this.queueItems()));
+  private lastWidgetKey = '';
+  private lastRefreshAt = 0;
+  /** Próximo episódio de cada série (plano B quando a lista da Crunchyroll não está disponível). */
+  protected readonly nextStates = signal<Record<string, NextState>>(this.settings.loadNext());
+  private resolvingQueue = false;
+  private readonly queueFailedAt = new Map<string, number>();
+  /** Série pedida por toque num widget; abre quando o histórico estiver carregado. */
+  private readonly pendingSeries = signal<string | null>(null);
   protected readonly widgetStyles = WIDGET_STYLES;
   protected readonly widgetSizes = WIDGET_SIZES;
   protected readonly widgetStyleLabel = WIDGET_STYLE_LABEL;
@@ -184,24 +204,6 @@ export class App {
   protected setWidgetSize(v: WidgetSize): void {
     this.settings.setWidgetSize(v);
   }
-  /** O que vai para os widgets da tela inicial (mesma ordem do "Continuar assistindo"). */
-  private readonly widgetItems = computed(() => {
-    const covers = this.covers();
-    return toWidgetPayload(
-      continueWatching(this.episodes(), 10, this.nextStates()).map((c) => ({
-        ...c,
-        coverUrl: c.coverUrl ?? covers[c.seriesId] ?? null,
-      })),
-    );
-  });
-  private lastWidgetKey = '';
-  private lastRefreshAt = 0;
-  /** Próximo episódio de cada série (some da fila quem terminou ou está em dia). */
-  protected readonly nextStates = signal<Record<string, NextState>>(this.settings.loadNext());
-  private resolvingQueue = false;
-  private readonly queueFailedAt = new Map<string, number>();
-  /** Série pedida por toque num widget; abre quando o histórico estiver carregado. */
-  private readonly pendingSeries = signal<string | null>(null);
   protected readonly visibleSeries = computed(() =>
     filterSeries(this.allSeries(), this.seriesFilters(), this.sort()),
   );
@@ -300,6 +302,7 @@ export class App {
         baseUrl: cfg.baseUrl,
         basicAuth: cfg.basicAuth,
         historyPath: cfg.historyPath,
+        watchlistPath: cfg.watchlistPath,
         seasonsPath: cfg.seasonsPath,
         episodesPath: cfg.episodesPath,
         locale: cfg.locale,
@@ -310,9 +313,10 @@ export class App {
       if (key === this.lastWidgetKey) return;
       this.lastWidgetKey = key;
       // `config` deixa o Android atualizar os widgets sozinho, sem o app aberto.
-      void HomeWidget.update({ items, config, next: this.nextStates() }).catch(
-        () => (this.lastWidgetKey = ''),
-      );
+      void HomeWidget.update({ items, config, next: this.nextStates() })
+        .then(() => HomeWidget.syncStatus())
+        .then((st) => this.diag.log(`widgets: ${describeSync(st)}`))
+        .catch(() => (this.lastWidgetKey = ''));
     });
     // Toque num widget: crunchysync://series/<id> abre os episódios da série.
     if (Capacitor.isNativePlatform()) {
@@ -367,6 +371,8 @@ export class App {
     await this.cr.logout();
     this.settings.clearHistoryCache();
     this.settings.clearNext();
+    this.settings.saveQueue(null);
+    this.watchlist.set(null);
     this.nextStates.set({});
     this.episodes.set([]);
     this.loaded.set(false);
@@ -405,6 +411,7 @@ export class App {
       this.selected.set(new Set());
       this.selectedSeries.set(new Set());
       void this.loadCovers();
+      void this.loadWatchlist();
       void this.resolveQueue();
     } catch (e) {
       this.handleError(e);
@@ -462,6 +469,19 @@ export class App {
       this.settings.saveNext(pruned);
     } finally {
       this.resolvingQueue = false;
+    }
+  }
+
+  /** Busca a lista "Continuar assistindo" da Crunchyroll; sem ela, vale a fila montada do histórico. */
+  private async loadWatchlist(): Promise<void> {
+    try {
+      const items = await this.cr.getWatchlist();
+      if (items !== null) {
+        this.watchlist.set(items);
+        this.settings.saveQueue(items);
+      }
+    } catch (e) {
+      this.handleError(e);
     }
   }
 
@@ -684,6 +704,25 @@ export class App {
       this.removing.set(false);
       this.removeProgress.set(null);
       this.pending.set(null);
+    }
+  }
+
+  protected readonly syncingWidgets = signal(false);
+
+  /** Roda a atualização em segundo plano dos widgets agora e registra o resultado no Diagnóstico. */
+  protected async syncWidgetsNow(): Promise<void> {
+    if (this.syncingWidgets()) return;
+    if (!Capacitor.isNativePlatform()) {
+      this.diag.log('widgets: a atualização em segundo plano só existe no aplicativo instalado');
+      return;
+    }
+    this.syncingWidgets.set(true);
+    try {
+      this.diag.log(`widgets: ${describeSync(await HomeWidget.syncNow())}`);
+    } catch (e) {
+      this.diag.log(`widgets: falhou (${(e as Error).message})`);
+    } finally {
+      this.syncingWidgets.set(false);
     }
   }
 
